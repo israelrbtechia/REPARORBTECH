@@ -165,3 +165,22 @@ create or replace function public.acompanhar_os(p_token text) returns jsonb
 $$;
 revoke all on function public.acompanhar_os(text) from public;
 grant execute on function public.acompanhar_os(text) to anon, authenticated;
+
+-- ---------- Funcionários criados pelo dono (Configurações → Equipe) ----------
+alter table public.membros add column if not exists nome text;
+
+-- O app cria a conta do funcionário (e-mail + senha) e o dono chama esta função
+-- para colocá-la na loja. Só o dono consegue.
+create or replace function public.adicionar_funcionario(p_loja uuid, p_email text, p_nome text) returns jsonb
+  language plpgsql security definer set search_path = public as $$
+declare u record;
+begin
+  if not public.sou_dono(p_loja) then raise exception 'apenas o dono pode adicionar funcionários'; end if;
+  select id, email, email_confirmed_at into u from auth.users where lower(email) = lower(trim(p_email)) limit 1;
+  if not found then raise exception 'Conta não encontrada para este e-mail'; end if;
+  insert into public.membros(loja_id, user_id, email, nome, papel) values (p_loja, u.id, u.email, nullif(trim(p_nome), ''), 'membro')
+    on conflict (loja_id, user_id) do update set nome = coalesce(excluded.nome, public.membros.nome);
+  return jsonb_build_object('user_id', u.id, 'confirmado', u.email_confirmed_at is not null);
+end $$;
+revoke all on function public.adicionar_funcionario(uuid, text, text) from public, anon;
+grant execute on function public.adicionar_funcionario(uuid, text, text) to authenticated;

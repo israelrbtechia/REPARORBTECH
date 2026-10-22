@@ -51,7 +51,9 @@ Com o Supabase ligado, os dados ficam na nuvem e sincronizam **em tempo real** e
 > Atualizou o app? Rode o `supabase/schema.sql` de novo no SQL Editor (é seguro repetir) para criar as funções novas, como a do link de acompanhamento.
 
 No primeiro acesso: **Criar conta → Criar minha loja**. Se o aparelho já tiver dados salvos (modo local), o app oferece enviá-los para a nuvem.
-Funcionários: criam a própria conta no app e entram com o **código de convite** mostrado em **Configurações → Equipe e nuvem**. O dono pode remover funcionários e gerar um novo código.
+Funcionários: o dono cria o login (nome, e-mail e senha) em **Configurações → Equipe e nuvem → Adicionar funcionário**. O funcionário entra com esse e-mail e senha e vê as mesmas telas e dados. O dono pode remover o acesso a qualquer momento. (Também dá para usar o código de convite.)
+
+> Recomendado: em **Authentication → Sign In / Providers → Email**, desligue **Confirm email** para o funcionário entrar na hora, sem precisar clicar em link no e-mail.
 
 Segurança: cada loja só enxerga os próprios dados (Row Level Security no Postgres). A chave *anon* é pública por natureza e pode ficar no código.
 

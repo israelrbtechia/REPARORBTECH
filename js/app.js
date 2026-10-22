@@ -185,7 +185,8 @@ const App = {
           ${field('Senha', `<div class="input-icon">${icon('lock')}<input class="input" name="senha" type="password" required minlength="6" placeholder="••••••••" autocomplete="${criar ? 'new-password' : 'current-password'}"><button type="button" class="icon-btn" style="position:absolute;right:4px;top:3px" onclick="const i=this.previousElementSibling;i.type=i.type==='password'?'text':'password'">${icon('eye')}</button></div>`)}
           ${criar ? field('Confirmar senha', inputIcon('lock', 'name="senha2" type="password" required minlength="6" placeholder="••••••••" autocomplete="new-password"')) : ''}
           <button class="btn primary block" id="lg-btn" style="margin-top:8px;min-height:54px;font-size:17px">${criar ? 'Criar conta' : 'Acessar Painel'} ${icon('arrowRight')}</button>
-          ${criar ? '' : `<p class="center small" style="margin-top:18px"><a href="#" id="forgot">Esqueceu a senha?</a></p>`}
+          ${criar ? '' : `<p class="center small" style="margin-top:18px"><a href="#" id="forgot">Esqueceu a senha?</a></p>
+          <p class="center xs muted">Funcionário: entre com o e-mail e a senha que o dono criou para você.</p>`}
           <div class="foot">© ${new Date().getFullYear()} <span class="gold">RB Tech Celulares</span>. Todos os direitos reservados.</div>
         </form>
       </div>`;

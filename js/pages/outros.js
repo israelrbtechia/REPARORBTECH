@@ -312,15 +312,29 @@ Pages.config = {
         <div class="kv"><span class="k">Loja</span><span class="v">${esc(Cloud.loja.nome)}</span></div>
         <div class="kv"><span class="k">Seu acesso</span><span class="v">${Cloud.loja.papel === 'dono' ? '<span class="gold">Dono</span>' : 'Funcionário'}</span></div>
         <div class="kv"><span class="k">Sincronização</span><span class="v">${{ ok: '<span class="green">Em dia</span>', sync: 'Sincronizando...', offline: '<span class="red">Sem internet</span>', erro: '<span class="red">Erro</span>' }[Cloud.status] || '—'}</span></div>
-        <div class="card mt" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)">
-          <div class="lbl">Código de convite</div>
-          <div class="row between"><b class="gold" style="font-size:26px;letter-spacing:.2em">${esc(Cloud.loja.codigo_convite || '—')}</b>
-          <button class="btn sm" onclick="navigator.clipboard?.writeText('${esc(Cloud.loja.codigo_convite)}');toast('Código copiado')">Copiar</button></div>
-          <div class="xs muted">O funcionário cria a conta dele no app e digita este código para entrar na equipe.</div>
-          ${Cloud.loja.papel === 'dono' ? `<button class="btn sm ghost mt" onclick="Pages.config.novoCodigo()">${icon('repeat', 'sm')} Gerar novo código</button>` : ''}
-        </div>
-        <div class="lbl mt mb">Membros</div><div id="cf-membros"><p class="small muted">Carregando...</p></div>
+        <div class="lbl mt mb">Quem tem acesso</div><div id="cf-membros"><p class="small muted">Carregando...</p></div>
+        ${Cloud.loja.papel === 'dono' ? `<form class="card mt" id="cf-func" style="background:#0a0a0a">
+          <div class="section-title">${icon('userPlus', 'sm')} Adicionar funcionário</div>
+          <p class="xs muted" style="margin-top:-6px">Crie o login dele aqui. Ele entra no app com este e-mail e senha e vê as mesmas telas que você.</p>
+          ${field('Nome', '<input class="input" name="fnome" placeholder="Ex: João" required>')}
+          ${field('E-mail (login)', '<input class="input" name="femail" type="email" placeholder="joao@email.com" required autocomplete="off">')}
+          ${field('Senha', `<div class="input-icon">${icon('lock')}<input class="input" name="fsenha" type="text" minlength="6" placeholder="Mínimo 6 caracteres" required autocomplete="new-password"></div>`)}
+          <button class="btn primary block">${icon('plus')} Criar acesso do funcionário</button>
+        </form>
+        <details class="mt"><summary class="small muted" style="cursor:pointer">Outra forma: código de convite</summary>
+          <div class="card mt" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)">
+            <div class="row between"><b class="gold" style="font-size:24px;letter-spacing:.2em">${esc(Cloud.loja.codigo_convite || '—')}</b>
+            <button type="button" class="btn sm" onclick="navigator.clipboard?.writeText('${esc(Cloud.loja.codigo_convite)}');toast('Código copiado')">Copiar</button></div>
+            <div class="xs muted">O funcionário cria a própria conta no app e digita este código.</div>
+            <button type="button" class="btn sm ghost mt" onclick="Pages.config.novoCodigo()">${icon('repeat', 'sm')} Gerar novo código</button>
+          </div></details>` : ''}
         <button class="btn block mt" onclick="App.syncAgora()">${icon('repeat')} Sincronizar agora</button>
+      </div>` : ''}
+
+      ${!Cloud.enabled ? `<div class="card mb" style="border-color:rgba(251,146,60,.45)">
+        <h3>${icon('alert', 'sm')} Nuvem <span class="red">desligada</span></h3>
+        <p class="small" style="margin:0">Os dados estão salvos <b>só neste aparelho e navegador</b>. Funcionários, outros celulares e outros navegadores <b>não</b> veem estas informações.</p>
+        <p class="small muted">Para salvar na nuvem, ter login de funcionários e acessar de qualquer aparelho, configure o Supabase (passo a passo no README do projeto). Até lá, use <b>Baixar backup</b> com frequência.</p>
       </div>` : ''}
 
       <div class="card mb">
@@ -353,6 +367,26 @@ Pages.config = {
     $('#cf-restore').onchange = e => this.restaurar(e.target.files[0]);
     $('#cf-dossie').onchange = e => { this.importarDossie(e.target.files[0]); e.target.value = ''; };
     if ($('#cf-membros')) this.renderMembros();
+    const ff = $('#cf-func');
+    if (ff) ff.onsubmit = async e => {
+      e.preventDefault();
+      const f = readForm(ff), btn = $('button.primary', ff);
+      if (f.fsenha.length < 6) return toast('A senha precisa ter pelo menos 6 caracteres', true);
+      btn.disabled = true;
+      try {
+        const r = await Cloud.criarFuncionario(f.fnome, f.femail.toLowerCase(), f.fsenha);
+        ff.reset(); this.renderMembros();
+        openModal({
+          title: r.jaExistia ? 'Funcionário adicionado' : 'Acesso criado!', icon: 'checkCircle',
+          body: r.jaExistia
+            ? `<p style="margin-top:0">Este e-mail já tinha conta. <b class="gold">${esc(f.fnome)}</b> agora faz parte da loja e entra com a <b>senha que já usava</b>.</p>`
+            : `<p style="margin-top:0">Passe estes dados para <b class="gold">${esc(f.fnome)}</b>:</p>
+               <div class="card"><div class="kv"><span class="k">Site</span><span class="v">${esc(location.origin)}</span></div><div class="kv"><span class="k">E-mail</span><span class="v">${esc(f.femail.toLowerCase())}</span></div><div class="kv"><span class="k">Senha</span><span class="v gold">${esc(f.fsenha)}</span></div></div>
+               ${r.confirmado ? '' : `<div class="info-box mt">${icon('alert')}<span>O Supabase está pedindo <b>confirmação de e-mail</b>: o funcionário precisa clicar no link enviado antes de entrar. Para não precisar, desligue em Supabase → Authentication → Sign In / Providers → Email → <b>Confirm email</b>.</span></div>`}`,
+          foot: r.jaExistia ? '<button class="btn primary" data-close>OK</button>' : `<button class="btn" data-close>Fechar</button><a class="btn success" target="_blank" href="https://wa.me/?text=${encodeURIComponent(`Seu acesso ao sistema da ${Store.s.loja}:\n\nSite: ${location.origin}\nE-mail: ${f.femail.toLowerCase()}\nSenha: ${f.fsenha}`)}">${icon('whatsapp')} Enviar dados</a>`,
+        });
+      } catch (err) { toast(err.message, true); } finally { btn.disabled = false; }
+    };
   },
 
   importarDossie(file) {
@@ -394,8 +428,8 @@ Pages.config = {
     try {
       const ms = await Cloud.membros();
       const dono = Cloud.loja.papel === 'dono';
-      box.innerHTML = ms.map(m => `<div class="cart-line"><div class="avatar">${esc((m.email || '?')[0].toUpperCase())}</div>
-        <div class="grow"><b class="ellipsis" style="display:block">${esc(m.email || 'Sem e-mail')}${m.user_id === Cloud.user.id ? ' <span class="muted xs">(você)</span>' : ''}</b><div class="xs ${m.papel === 'dono' ? 'gold' : 'muted'}">${m.papel === 'dono' ? 'Dono' : 'Funcionário'} · desde ${fmtDate(m.criado_em)}</div></div>
+      box.innerHTML = ms.map(m => `<div class="cart-line"><div class="avatar">${esc((m.nome || m.email || '?')[0].toUpperCase())}</div>
+        <div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(m.nome || m.email || 'Sem e-mail')}${m.user_id === Cloud.user.id ? ' <span class="muted xs">(você)</span>' : ''}</b><div class="xs muted ellipsis">${m.nome ? esc(m.email) + ' · ' : ''}<span class="${m.papel === 'dono' ? 'gold' : ''}">${m.papel === 'dono' ? 'Dono' : 'Funcionário'}</span> · desde ${fmtDate(m.criado_em)}</div></div>
         ${dono && m.papel !== 'dono' ? `<button class="icon-btn" title="Remover da equipe" data-rm="${m.user_id}">${icon('trash', 'sm')}</button>` : ''}</div>`).join('');
       $$('[data-rm]', box).forEach(b => b.onclick = async () => {
         if (!(await confirmDialog('Remover este funcionário da equipe? Ele perde o acesso aos dados da loja.', { danger: true, ok: 'Remover' }))) return;

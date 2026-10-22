@@ -98,9 +98,22 @@ const Cloud = {
     this.loja = { ...data, papel: 'membro' };
   },
   async membros() {
-    const { data, error } = await this.sb.from('membros').select('user_id, email, papel, criado_em').eq('loja_id', this.loja.id).order('criado_em');
+    const { data, error } = await this.sb.from('membros').select('user_id, email, nome, papel, criado_em').eq('loja_id', this.loja.id).order('criado_em');
     if (error) throw error;
     return data;
+  },
+  // Dono cria login e senha do funcionário. Usa um cliente separado para não trocar a sessão do dono.
+  async criarFuncionario(nome, email, senha) {
+    const c = window.RBTECH_CONFIG;
+    const tmp = supabase.createClient(c.supabaseUrl, c.supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'rbtech-novo-func' } });
+    const { data, error } = await tmp.auth.signUp({ email, password: senha, options: { data: { nome } } });
+    let jaExistia = false;
+    if (error) { if (/already|registered|exists/i.test(error.message)) jaExistia = true; else throw new Error(error.message.includes('Password') ? 'Senha fraca: use pelo menos 6 caracteres' : error.message); }
+    else if (data.user && Array.isArray(data.user.identities) && !data.user.identities.length) jaExistia = true;
+    await tmp.auth.signOut().catch(() => {});
+    const r = await this.sb.rpc('adicionar_funcionario', { p_loja: this.loja.id, p_email: email, p_nome: nome });
+    if (r.error) throw new Error(r.error.message);
+    return { jaExistia, confirmado: !!r.data?.confirmado };
   },
   async removerMembro(uid) {
     const { error } = await this.sb.from('membros').delete().eq('loja_id', this.loja.id).eq('user_id', uid);
