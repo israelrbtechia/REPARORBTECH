@@ -9,7 +9,7 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 - **Orçamentos**: itens, validade, envio por WhatsApp, impressão e conversão em OS.
 - **Clientes e Aparelhos**: cadastro com CPF/CNPJ, WhatsApp, origem, vários aparelhos (IMEI/serial), histórico e total gasto.
 - **Peças (estoque)**: custo, mínimo, fornecedores, entrada em lote, histórico de movimentação, etiquetas, CSV.
-- **Venda de Produtos (PDV)**: carrinho, desconto, formas de pagamento, recibo, cancelamento com estorno de estoque.
+- **Venda de Produtos (PDV)**: **Nova venda** com produtos do estoque ou cadastrados na hora (celular ou acessório), cliente cadastrado ou novo, troca, desconto, recibo em PDF e cancelamento com estorno.
 - **Pós-Venda**: acompanhamento após o serviço, aparelhos não retirados, garantias vencendo, aniversariantes.
 - **Serviços**: catálogo com preço e garantia padrão.
 - **Financeiro**: receitas, custos, taxas de cartão, despesas, lucro e margem por período.

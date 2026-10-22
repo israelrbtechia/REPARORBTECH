@@ -203,21 +203,8 @@ const AparelhosPage = {
           if (!clienteId) return toast('Informe o cliente', true);
           const forma = $('#vx-forma', el).value;
           const item = { id: p.id, nome: p.nome, preco, custo: p.custo || 0, qtd: 1, seminovo: !!p.seminovo, aparelho: true, imei: $('#vx-imei', el).value.trim(), cor: p.cor || '', garantiaDias: p.seminovo ? GARANTIA_SEMINOVO_DIAS : (p.garantiaDias ?? 365) };
-          const v = { id: uid(), numero: Store.next('venda'), data: nowISO(), itens: [item], subtotal: preco, desconto: desc, total: preco - desc, custo: item.custo, forma, clienteId };
-          Store.movimentar('produto', p, -1, `Venda #${v.numero}`);
-          p.vendidoEm = v.data; if (!p.imei && item.imei) p.imei = item.imei;
-          if (temTroca) {
-            const np = this.entrarNoEstoque(tr, troca, 'troca', `Venda #${v.numero}`);
-            v.troca = { produtoId: np.id, nome: tr.nome, imei: tr.imei, valor: troca };
-            v.pago = pagar;
-          }
-          Store.db.vendas.push(v);
-          // faturamento = preço total; a parte paga com o aparelho fica registrada como "Aparelho na troca"
-          if (pagar > 0) Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero}`, valor: pagar, custo: item.custo, forma, data: v.data });
-          if (troca) Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero} (aparelho na troca)`, valor: Math.min(troca, v.total), custo: pagar > 0 ? 0 : item.custo, forma: 'troca', data: v.data });
-          if (pagar < 0) Store.addDespesa({ desc: `Diferença devolvida na troca · Venda #${v.numero}`, valor: -pagar, forma, categoria: 'Compra de aparelhos', estoque: true });
-          Store.log('Venda de aparelho', `#${v.numero} ${p.nome}${temTroca ? ` com troca (${tr.nome})` : ''}`);
-          Store.save(); m.close(); App.refresh();
+          const v = VendasPage.registrar({ itens: [item], clienteId, desconto: desc, forma, troca: temTroca ? { ...tr, valor: troca } : null });
+          m.close(); App.refresh();
           VendasPage.recibo(v);
         };
       },

@@ -44,10 +44,10 @@ const VendasPage = {
         <div class="tabs" id="vd-cat">${[['', 'Todos os celulares'], ['seminovo', 'Seminovos'], ['novo', 'Novos']].map(([k, l]) => `<button data-c="${k}" class="${this.st.cat === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       </div>
       <div class="row wrap mb">
-        <button class="btn primary" onclick="EstoquePage.editar('produto', null, { tipoProduto: 'seminovo' })">${icon('plus')} Novo celular</button>
-        <button class="btn" onclick="EstoquePage.editar('produto', null, { tipoProduto: 'acessorio' })">${icon('tag')} Novo acessório</button>
-        <button class="btn" title="Venda avulsa" onclick="VendasPage.avulso()">${icon('repeat')} Avulso</button>
-        <button class="btn" title="Entrada em lote" onclick="EstoquePage.lote('produto')">${icon('layers')}</button>
+        <button class="btn primary" style="flex:1 1 100%;min-height:54px;font-size:17px" onclick="VendasPage.novaVenda()">${icon('cart')} Nova venda</button>
+        <button class="btn sm" onclick="EstoquePage.editar('produto', null, { tipoProduto: 'seminovo' })">${icon('plus', 'sm')} Cadastrar celular</button>
+        <button class="btn sm" onclick="EstoquePage.editar('produto', null, { tipoProduto: 'acessorio' })">${icon('plus', 'sm')} Cadastrar acessório</button>
+        <button class="btn sm" title="Entrada em lote" onclick="EstoquePage.lote('produto')">${icon('layers', 'sm')} Lote</button>
       </div>
       <div class="xs muted mb" id="vd-dica"></div>
       <div class="grid grid-2" id="vd-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))"></div>`;
@@ -68,14 +68,14 @@ const VendasPage = {
     if (dica) dica.innerHTML = q ? `${list.length} resultado(s) para "<b>${esc(q)}</b>" · celulares e acessórios` : `${icon('info', 'sm')} Mostrando só celulares em estoque. Acessórios aparecem quando você busca.`;
     g.innerHTML = list.map(p => {
       const inCart = this.cart.find(c => c.id === p.id)?.qtd || 0;
-      return `<div class="prod-card" onclick="VendasPage.add('${p.id}')" style="${inCart ? 'border-color:var(--gold)' : ''}">
+      return `<div class="prod-card" onclick="VendasPage.novaVenda({ produtoId: '${p.id}' })" style="${inCart ? 'border-color:var(--gold)' : ''}">
         <div class="row between"><span class="xs muted ellipsis">${esc(p.categoria || '')}</span><button class="icon-btn" style="width:30px;height:30px" onclick="event.stopPropagation();EstoquePage.editar('produto','${p.id}')">${icon('edit', 'sm')}</button></div>
         <b style="line-height:1.25">${esc(p.nome)}</b>
         ${ehCelular(p) ? `<div class="row wrap" style="gap:4px">${p.seminovo ? '<span class="pill gold xs">Seminovo · 6 meses</span>' : '<span class="pill green xs">Novo</span>'}${p.statusAparelho && p.statusAparelho !== 'disponivel' && STATUS_AP[p.statusAparelho] ? `<span class="pill ${STATUS_AP[p.statusAparelho][1]} xs">${STATUS_AP[p.statusAparelho][0]}</span>` : ''}${p.armazenamento ? `<span class="pill xs">${esc(p.armazenamento)}</span>` : ''}${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei || p.cor ? `<div class="xs muted ellipsis">${[p.cor, p.imei && 'IMEI ' + p.imei].filter(Boolean).map(esc).join(' · ')}</div>` : ''}` : '<span class="pill xs" style="align-self:flex-start">Acessório</span>'}
         <div class="gold bold" style="font-size:18px">${money(p.preco)}</div>
         <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span>${inCart ? `<span class="pill gold xs">${inCart} no carrinho</span>` : ''}</div>
       </div>`;
-    }).join('') || `<div class="empty" style="grid-column:1/-1">${icon(q ? 'search' : 'phone')}<div>${q ? 'Nada encontrado.' : 'Nenhum celular em estoque.<br>Toque em <b class="gold">Novo celular</b> para cadastrar. Acessórios aparecem pela busca.'}</div></div>`;
+    }).join('') || `<div class="empty" style="grid-column:1/-1">${icon(q ? 'search' : 'phone')}<div>${q ? 'Nada encontrado.' : 'Nenhum celular em estoque.<br>Para vender algo sem cadastro, toque em <b class="gold">Nova venda</b>. Acessórios aparecem pela busca.'}</div></div>`;
     this.updateFab();
   },
 
@@ -94,69 +94,214 @@ const VendasPage = {
     toast(`${p.nome} adicionado`);
   },
 
-  avulso() {
-    openModal({
-      title: 'Item avulso', icon: 'repeat', subtitle: 'Venda de algo que não está no cadastro',
-      body: `${field('Descrição', '<input class="input" id="av-n" placeholder="Ex: Película genérica">', { req: true })}<div class="form-row">${field('Preço', '<input class="input" id="av-p" inputmode="decimal" placeholder="0,00">')}${field('Custo', '<input class="input" id="av-c" inputmode="decimal" placeholder="0,00">', { opt: true })}</div>`,
-      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="av-ok">Adicionar ao carrinho</button>`,
-      onMount: (el, m) => $('#av-ok', el).onclick = () => {
-        const nome = $('#av-n', el).value.trim(); const preco = parseMoney($('#av-p', el).value);
-        if (!nome || !preco) return toast('Informe descrição e preço', true);
-        this.cart.push({ id: 'av-' + uid(), avulso: true, nome, preco, custo: parseMoney($('#av-c', el).value), qtd: 1 });
-        m.close(); this.renderProdutos(); this.checkout();
-      },
-    });
+  // Item do carrinho a partir de um produto cadastrado
+  itemDe(p) {
+    return { id: p.id, nome: p.nome, preco: p.preco || 0, custo: p.custo || 0, qtd: 1, tipoProduto: tipoProduto(p), seminovo: !!p.seminovo, aparelho: ehCelular(p), imei: p.imei || '', cor: p.cor || '', garantiaDias: p.seminovo ? GARANTIA_SEMINOVO_DIAS : (p.garantiaDias ?? (ehCelular(p) ? 365 : 90)) };
   },
 
-  checkout() {
-    if (!this.cart.length) return toast('Carrinho vazio', true);
-    const clientes = Store.clientesAtivos();
-    openModal({
-      title: 'Finalizar venda', icon: 'cart',
-      body: `<div id="ck-items"></div>
-        <div class="form-row mt">${field('Desconto (R$)', '<input class="input" id="ck-desc" inputmode="decimal" placeholder="0,00">')}${field('Forma de pagamento', `<select class="input" id="ck-forma">${selectOpts(FORMAS_PGTO, 'pix')}</select>`)}</div>
-        ${field('Cliente', `<select class="input" id="ck-cli"><option value="">Consumidor final</option>${clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select>`, { opt: true })}
-        <div id="ck-semi"></div>
-        <div class="card center" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)"><div class="small muted">Total</div><div class="gold bold" style="font-size:32px" id="ck-total"></div><div class="xs muted" id="ck-lucro"></div></div>`,
-      foot: `<button class="btn danger" id="ck-clear">${icon('trash')} Limpar</button><button class="btn primary" id="ck-ok" style="flex:2">${icon('check')} Confirmar venda</button>`,
-      onMount: (el, m) => {
-        const calc = () => {
-          const sub = this.cart.reduce((s, c) => s + c.preco * c.qtd, 0);
-          const desc = parseMoney($('#ck-desc', el).value);
-          const custo = this.cart.reduce((s, c) => s + c.custo * c.qtd, 0);
-          $('#ck-total', el).textContent = money(sub - desc);
-          $('#ck-lucro', el).textContent = `Subtotal ${money(sub)} · lucro estimado ${money(sub - desc - custo)}`;
-          return { sub, desc, custo };
-        };
-        const items = () => {
-          const semi = this.cart.some(c => c.seminovo);
-          $('#ck-semi', el).innerHTML = semi ? `<div class="info-box">${icon('shieldCheck')}<span>Aparelho seminovo: <b>garantia de 6 meses</b>. O termo em PDF é gerado ao confirmar a venda.</span></div>
-            ${field('Nome do comprador (se não cadastrado)', '<input class="input" id="ck-nome" placeholder="Nome completo">', { opt: true })}` : '';
-          $('#ck-items', el).innerHTML = this.cart.map((c, i) => `<div class="cart-line" style="flex-wrap:wrap"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${money(c.preco)} un.${c.seminovo ? ' · <span class="gold">garantia 6 meses</span>' : ''}</div></div>
-            <div class="qty"><button data-d="-1" data-i="${i}">−</button><span>${c.qtd}</span><button data-d="1" data-i="${i}">+</button></div><b style="min-width:80px;text-align:right">${money(c.preco * c.qtd)}</b>
-            ${c.aparelho || c.seminovo ? `<input class="input" data-imei="${i}" placeholder="IMEI do aparelho" value="${esc(c.imei)}" style="flex-basis:100%;min-height:40px;padding:8px 12px;font-family:ui-monospace,monospace">` : ''}</div>`).join('');
-          $$('[data-imei]', el).forEach(inp => inp.oninput = () => { this.cart[+inp.dataset.imei].imei = inp.value.trim(); });
-          $$('[data-d]', el).forEach(b => b.onclick = () => { const c = this.cart[+b.dataset.i]; c.qtd += +b.dataset.d; if (c.qtd <= 0) this.cart.splice(+b.dataset.i, 1); if (!this.cart.length) { m.close(); this.renderProdutos(); return; } items(); this.renderProdutos(); });
-          calc();
-        };
-        items();
-        $('#ck-desc', el).oninput = calc;
-        $('#ck-clear', el).onclick = () => { this.cart = []; m.close(); this.renderProdutos(); };
-        $('#ck-ok', el).onclick = () => {
-          if (Store.s.exigirCaixa && !Store.caixaAberto()) return toast('Abra o caixa antes de vender', true);
-          const { sub, desc, custo } = calc();
-          if (desc > sub) return toast('Desconto maior que o total', true);
-          const v = { id: uid(), numero: Store.next('venda'), data: nowISO(), itens: this.cart.map(c => ({ ...c })), subtotal: sub, desconto: desc, total: sub - desc, custo, forma: $('#ck-forma', el).value, clienteId: $('#ck-cli', el).value || null, clienteNome: $('#ck-nome', el)?.value.trim() || '' };
-          v.itens.forEach(i => { if (!i.avulso) { const p = Store.produto(i.id); if (p) Store.movimentar('produto', p, -i.qtd, `Venda #${v.numero}`); } });
-          Store.db.vendas.push(v);
-          Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero}`, valor: v.total, custo, forma: v.forma, data: v.data });
-          Store.log('Venda', `#${v.numero} ${money(v.total)}`);
-          Store.save(); this.cart = []; m.close(); App.refresh();
-          this.recibo(v);
-        };
-      },
-    });
+  /* ---------- Registrar venda (usado pela Nova venda e pela aba Aparelhos) ----------
+     itens: [{ id, nome, preco, custo, qtd, seminovo, aparelho, imei, garantiaDias, avulso }]
+     troca: { nome, imei, armazenamento, cor, bateria, condicao, valor, preco } */
+  registrar({ itens, clienteId = null, clienteNome = '', desconto = 0, forma = 'pix', troca = null }) {
+    const subtotal = itens.reduce((s, i) => s + i.preco * i.qtd, 0);
+    const custo = itens.reduce((s, i) => s + (i.custo || 0) * i.qtd, 0);
+    const total = subtotal - desconto;
+    const v = { id: uid(), numero: Store.next('venda'), data: nowISO(), itens: itens.map(i => ({ ...i })), subtotal, desconto, total, custo, forma, clienteId, clienteNome };
+    for (const i of v.itens) {
+      const p = !i.avulso && Store.produto(i.id);
+      if (!p) continue;
+      Store.movimentar('produto', p, -i.qtd, `Venda #${v.numero}`);
+      if (ehCelular(p)) { p.vendidoEm = v.data; if (!p.imei && i.imei) p.imei = i.imei; }
+    }
+    let pagar = total;
+    if (troca && troca.valor) {
+      const np = AparelhosPage.entrarNoEstoque(troca, troca.valor, 'troca', `Venda #${v.numero}`);
+      v.troca = { produtoId: np.id, nome: troca.nome, imei: troca.imei, valor: troca.valor };
+      pagar = total - troca.valor; v.pago = pagar;
+    }
+    Store.db.vendas.push(v);
+    // faturamento = total da venda; a parte paga com aparelho fica como "Aparelho na troca"
+    if (pagar > 0) Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero}`, valor: pagar, custo, forma, data: v.data });
+    if (v.troca) Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero} (aparelho na troca)`, valor: Math.min(v.troca.valor, total), custo: pagar > 0 ? 0 : custo, forma: 'troca', data: v.data });
+    if (pagar < 0) Store.addDespesa({ desc: `Diferença devolvida na troca · Venda #${v.numero}`, valor: -pagar, forma, categoria: 'Compra de aparelhos', estoque: true });
+    Store.log('Venda', `#${v.numero} ${money(v.total)}${v.troca ? ` com troca (${v.troca.nome})` : ''}`);
+    Store.save();
+    return v;
   },
+
+  /* ---------- Nova venda ----------
+     Escolhe produtos do estoque ou cadastra na hora, escolhe/cadastra o cliente, troca e pagamento */
+  novaVenda(pre = {}) {
+    const sale = { itens: this.cart.map(c => ({ ...c })), clienteId: pre.clienteId || null, cli: 'busca', troca: false };
+    if (pre.produtoId) { const p = Store.produto(pre.produtoId); if (p && !sale.itens.some(i => i.id === p.id)) sale.itens.push(this.itemDe(p)); }
+    const m = openModal({
+      title: 'Nova venda', icon: 'cart', wide: true,
+      body: `
+        <div class="section-title">${icon('bag', 'sm')} Produtos</div>
+        <div id="nv-itens"></div>
+        <div class="input-icon">${icon('search')}<input class="input" id="nv-q" placeholder="Buscar celular ou acessório para adicionar..."></div>
+        <div id="nv-res" class="mt"></div>
+        <button class="btn outline-gold block mt" id="nv-novo">${icon('plus')} Produto ou celular sem cadastro</button>
+        <div id="nv-form" class="card mt hidden" style="background:#0a0a0a"></div>
+
+        <div class="section-title mt">${icon('user', 'sm')} Cliente</div>
+        <div id="nv-cli"></div>
+
+        <label class="check card mt mb" style="padding:12px 14px"><input type="checkbox" id="nv-tem-troca"> <span><b>Cliente vai dar um aparelho na troca</b><br><span class="xs muted">Abate do valor e o aparelho entra no estoque (em revisão).</span></span></label>
+        <div id="nv-troca" class="hidden card mb" style="background:#0a0a0a">${AparelhosPage.camposAparelho('tr')}
+          <div class="form-row">${field('Valor da troca', '<input class="input" id="tr-valor" inputmode="decimal" placeholder="0,00">', { req: true })}${field('Preço p/ revenda', '<input class="input" id="tr-preco" inputmode="decimal" placeholder="opcional">', { opt: true })}</div></div>
+
+        <div class="form-row">${field('Desconto (R$)', '<input class="input" id="nv-desc" inputmode="decimal" placeholder="0,00">')}${field('Pagamento', `<select class="input" id="nv-forma">${selectOpts(FORMAS_PGTO, 'pix')}</select>`)}</div>
+        <div class="card" id="nv-resumo" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)"></div>`,
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="nv-ok" style="flex:2">${icon('check')} Confirmar venda</button>`,
+      onClose: () => { this.cart = []; if (App.route === 'vendas') this.renderProdutos(); },
+    });
+    const el = m.el;
+
+    const calc = () => {
+      const sub = sale.itens.reduce((s, i) => s + i.preco * i.qtd, 0);
+      const desc = parseMoney($('#nv-desc', el).value);
+      const troca = sale.troca ? parseMoney($('#tr-valor', el).value) : 0;
+      const custo = sale.itens.reduce((s, i) => s + (i.custo || 0) * i.qtd, 0);
+      const pagar = sub - desc - troca;
+      $('#nv-resumo', el).innerHTML = `<div class="kv"><span class="k">Subtotal (${sale.itens.reduce((s, i) => s + i.qtd, 0)} item)</span><span class="v">${money(sub)}</span></div>
+        ${desc ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(desc)}</span></div>` : ''}
+        ${troca ? `<div class="kv"><span class="k">Aparelho na troca</span><span class="v red">-${money(troca)}</span></div>` : ''}
+        <div class="kv"><span class="k bold">${pagar >= 0 ? 'Cliente paga' : 'Loja devolve'}</span><span class="v gold" style="font-size:24px">${money(Math.abs(pagar))}</span></div>
+        <div class="xs muted">Lucro estimado: ${money(sub - desc - custo)}</div>`;
+      return { sub, desc, troca };
+    };
+
+    const itens = () => {
+      $('#nv-itens', el).innerHTML = sale.itens.length ? sale.itens.map((i, k) => `<div class="cart-line" style="flex-wrap:wrap">
+          <div class="grow" style="min-width:0"><b>${esc(i.nome)}</b>
+            <div class="xs muted">${i.seminovo ? '<span class="gold">Seminovo · 6 meses</span>' : i.aparelho ? 'Celular novo' : 'Acessório'}${i.novo ? ' · <span class="green">cadastro novo</span>' : ''}</div></div>
+          ${i.aparelho ? '' : `<div class="qty"><button data-d="-1" data-k="${k}">−</button><span>${i.qtd}</span><button data-d="1" data-k="${k}">+</button></div>`}
+          <input class="input" data-preco="${k}" inputmode="decimal" value="${moneyInput(i.preco)}" style="width:104px;min-height:38px;padding:6px 10px;text-align:right">
+          <button class="icon-btn" data-rm="${k}" title="Remover">${icon('trash', 'sm')}</button>
+          ${i.aparelho ? `<input class="input" data-imei="${k}" placeholder="IMEI do aparelho" value="${esc(i.imei || '')}" style="flex-basis:100%;min-height:38px;padding:6px 12px;font-family:ui-monospace,monospace">` : ''}
+        </div>`).join('') : '<p class="small muted" style="margin-top:0">Nenhum produto ainda. Busque abaixo ou cadastre um novo.</p>';
+      $$('[data-d]', el).forEach(b => b.onclick = () => { const i = sale.itens[+b.dataset.k]; i.qtd = Math.max(1, i.qtd + +b.dataset.d); itens(); });
+      $$('[data-rm]', el).forEach(b => b.onclick = () => { sale.itens.splice(+b.dataset.rm, 1); itens(); busca(); });
+      $$('[data-preco]', el).forEach(inp => inp.oninput = () => { sale.itens[+inp.dataset.preco].preco = parseMoney(inp.value); calc(); });
+      $$('[data-imei]', el).forEach(inp => inp.oninput = () => { sale.itens[+inp.dataset.imei].imei = inp.value.trim(); });
+      calc();
+    };
+
+    const busca = () => {
+      const q = $('#nv-q', el).value.trim();
+      if (!q) { $('#nv-res', el).innerHTML = ''; return; }
+      const r = Store.db.produtos.filter(p => !p.deleted && matches(q, p.nome, p.codigo, p.imei, p.cor) && !sale.itens.some(i => i.id === p.id && ehCelular(p)))
+        .sort((a, b) => (b.qtd > 0) - (a.qtd > 0) || (ehCelular(b) - ehCelular(a))).slice(0, 6);
+      $('#nv-res', el).innerHTML = `<div class="card pad-0">${r.map(p => `<div class="item" data-add="${p.id}" style="padding:10px 14px"><div class="row between"><div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(p.nome)}</b><div class="xs muted">${ehCelular(p) ? (p.seminovo ? 'Seminovo' : 'Celular novo') : 'Acessório'} · estoque ${p.qtd}${p.imei ? ' · IMEI ' + esc(p.imei) : ''}</div></div><b class="gold">${money(p.preco)}</b></div></div>`).join('')}
+        <div class="item" id="nv-cad" style="padding:10px 14px"><b class="gold">${icon('plus', 'sm')} Cadastrar "${esc(q)}" nesta venda</b></div></div>`;
+      $$('[data-add]', el).forEach(d => d.onclick = () => {
+        const p = Store.produto(d.dataset.add);
+        if (p.qtd <= 0) toast(`Atenção: "${p.nome}" está sem estoque`, true);
+        const ex = sale.itens.find(i => i.id === p.id);
+        if (ex) ex.qtd++; else sale.itens.push(this.itemDe(p));
+        $('#nv-q', el).value = ''; busca(); itens();
+      });
+      $('#nv-cad', el).onclick = () => formNovo(q);
+    };
+
+    // Cadastro de produto/celular feito junto com a venda
+    const formNovo = (nome = '') => {
+      const f = $('#nv-form', el); f.classList.remove('hidden'); $('#nv-res', el).innerHTML = ''; $('#nv-q', el).value = '';
+      f.innerHTML = `<div class="section-title">Cadastrar e adicionar</div>
+        <input type="hidden" id="nf-tipo" value="${/iphone|galaxy|samsung|motorola|moto |xiaomi|redmi|poco|realme/i.test(nome) ? 'seminovo' : 'acessorio'}">
+        <div class="grid grid-3 mb" id="nf-tipos">${[['seminovo', 'Celular seminovo'], ['novo', 'Celular novo'], ['acessorio', 'Acessório']].map(([k, l]) => `<button type="button" class="chip-opt" data-tp="${k}">${l}</button>`).join('')}</div>
+        ${field('Nome / modelo', `<input class="input" id="nf-nome" value="${esc(nome)}" placeholder="Ex: iPhone 12 128GB, Capinha anti-impacto">`, { req: true })}
+        <div class="form-row">${field('Preço de venda', '<input class="input" id="nf-preco" inputmode="decimal" placeholder="0,00">', { req: true })}${field('Custo', '<input class="input" id="nf-custo" inputmode="decimal" placeholder="0,00">', { opt: true })}</div>
+        <div id="nf-cel">
+          <div class="form-row">${field('IMEI', '<input class="input" id="nf-imei" style="font-family:ui-monospace,monospace">', { opt: true })}${field('Cor', '<input class="input" id="nf-cor">', { opt: true })}</div>
+          <div class="form-row">${field('Armazenamento', '<input class="input" id="nf-arm" placeholder="128 GB">', { opt: true })}${field('Saúde da bateria', '<input class="input" id="nf-bat" placeholder="88%">', { opt: true })}</div>
+        </div>
+        <div id="nf-ac" class="form-row">${field('Quantidade', '<input class="input" id="nf-qtd" type="number" min="1" value="1">')}${field('Garantia (dias)', '<input class="input" id="nf-gar" type="number" value="90">')}</div>
+        <label class="check"><input type="checkbox" id="nf-salvar" checked> Salvar no cadastro de produtos</label>
+        <div class="row"><button class="btn" id="nf-cancel">Cancelar</button><button class="btn primary grow" id="nf-ok">${icon('plus')} Adicionar à venda</button></div>`;
+      const setTipo = t => { $('#nf-tipo', el).value = t; $$('#nf-tipos [data-tp]', el).forEach(x => x.classList.toggle('on', x.dataset.tp === t)); $('#nf-cel', el).classList.toggle('hidden', t === 'acessorio'); $('#nf-ac', el).classList.toggle('hidden', t !== 'acessorio'); };
+      $$('#nf-tipos [data-tp]', el).forEach(b => b.onclick = () => setTipo(b.dataset.tp));
+      setTipo($('#nf-tipo', el).value);
+      $('#nf-cancel', el).onclick = () => f.classList.add('hidden');
+      $('#nf-ok', el).onclick = () => {
+        const t = $('#nf-tipo', el).value, nm = $('#nf-nome', el).value.trim(), preco = parseMoney($('#nf-preco', el).value);
+        if (!nm || !preco) return toast('Informe o nome e o preço', true);
+        const cel = t !== 'acessorio';
+        sale.itens.push({ id: 'novo-' + uid(), novo: true, salvar: $('#nf-salvar', el).checked, nome: nm, preco, custo: parseMoney($('#nf-custo', el).value), qtd: cel ? 1 : Math.max(1, +$('#nf-qtd', el).value || 1),
+          tipoProduto: t, seminovo: t === 'seminovo', aparelho: cel, imei: cel ? $('#nf-imei', el).value.trim() : '', cor: cel ? $('#nf-cor', el).value.trim() : '',
+          armazenamento: cel ? $('#nf-arm', el).value.trim() : '', bateria: cel ? $('#nf-bat', el).value.trim() : '',
+          garantiaDias: t === 'seminovo' ? GARANTIA_SEMINOVO_DIAS : t === 'novo' ? 365 : (+$('#nf-gar', el).value || 0) });
+        f.classList.add('hidden'); itens();
+      };
+      $('#nf-nome', el).focus();
+    };
+
+    // Cliente: buscar cadastrado, cadastrar novo ou consumidor final
+    const cliente = () => {
+      const box = $('#nv-cli', el);
+      const c = sale.clienteId && Store.cliente(sale.clienteId);
+      if (c) {
+        box.innerHTML = `<div class="cart-line"><div class="avatar">${esc(c.nome[0].toUpperCase())}</div><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${esc(fmtPhone(c.telefone) || 'sem telefone')}</div></div><button class="btn sm" id="nc-trocar">Trocar</button></div>`;
+        $('#nc-trocar', el).onclick = () => { sale.clienteId = null; cliente(); };
+        return;
+      }
+      box.innerHTML = `<div class="tabs mb" id="nc-modo">${[['busca', 'Cliente cadastrado'], ['novo', 'Novo cliente'], ['final', 'Consumidor final']].map(([k, l]) => `<button data-m="${k}" class="${sale.cli === k ? 'on' : ''}" style="flex:1">${l}</button>`).join('')}</div>
+        ${sale.cli === 'busca' ? `${inputIcon('search', 'id="nc-q" placeholder="Nome, telefone ou CPF"')}<div id="nc-res" class="mt"></div>`
+          : sale.cli === 'novo' ? `<div class="form-row">${field('Nome', '<input class="input" id="nc-nome" placeholder="Nome completo">', { req: true })}${field('WhatsApp', '<input class="input" id="nc-tel" type="tel" placeholder="(48) 99999-9999">')}</div>${field('CPF', '<input class="input" id="nc-doc" inputmode="numeric">', { opt: true })}`
+          : `${field('Nome do comprador', '<input class="input" id="nc-final" placeholder="Opcional">', { opt: true })}`}`;
+      $$('#nc-modo [data-m]', el).forEach(b => b.onclick = () => { sale.cli = b.dataset.m; cliente(); });
+      const q = $('#nc-q', el);
+      if (q) q.oninput = () => {
+        const r = q.value.trim() ? Store.clientesAtivos().filter(x => matches(q.value, x.nome, x.telefone, x.doc)).slice(0, 5) : [];
+        $('#nc-res', el).innerHTML = r.length ? `<div class="card pad-0">${r.map(x => `<div class="item" data-c="${x.id}" style="padding:10px 14px"><b>${esc(x.nome)}</b> <span class="xs muted">${esc(fmtPhone(x.telefone) || '')}</span></div>`).join('')}</div>`
+          : q.value.trim() ? `<div class="small muted">Nenhum cliente encontrado. <a href="#" id="nc-cad">Cadastrar "${esc(q.value.trim())}"</a></div>` : '';
+        $$('[data-c]', el).forEach(d => d.onclick = () => { sale.clienteId = d.dataset.c; cliente(); });
+        const cad = $('#nc-cad', el); if (cad) cad.onclick = e => { e.preventDefault(); const nome = q.value.trim(); sale.cli = 'novo'; cliente(); $('#nc-nome', el).value = nome; $('#nc-tel', el).focus(); };
+      };
+    };
+
+    $('#nv-q', el).oninput = busca;
+    $('#nv-novo', el).onclick = () => formNovo('');
+    $('#nv-tem-troca', el).onchange = e => { sale.troca = e.target.checked; $('#nv-troca', el).classList.toggle('hidden', !sale.troca); calc(); };
+    $$('#nv-desc, #tr-valor', el).forEach(i => i.oninput = calc);
+    itens(); cliente();
+
+    $('#nv-ok', el).onclick = () => {
+      if (Store.s.exigirCaixa && !Store.caixaAberto()) return toast('Abra o caixa antes de vender', true);
+      if (!sale.itens.length) return toast('Adicione pelo menos um produto', true);
+      const { sub, desc, troca } = calc();
+      if (desc > sub) return toast('Desconto maior que o total', true);
+      let tr = null;
+      if (sale.troca) { tr = { ...AparelhosPage.lerAparelho(el, 'tr'), valor: troca, preco: parseMoney($('#tr-preco', el).value) }; if (!tr.nome || !troca) return toast('Informe o modelo e o valor do aparelho da troca', true); }
+      // cliente
+      let clienteId = sale.clienteId, clienteNome = '';
+      if (!clienteId && sale.cli === 'novo') {
+        const nome = $('#nc-nome', el).value.trim(); if (!nome) return toast('Informe o nome do cliente', true);
+        const tel = onlyDigits($('#nc-tel', el).value);
+        const ex = tel && Store.clientesAtivos().find(x => onlyDigits(x.telefone) === tel);
+        clienteId = ex ? ex.id : Store.saveCliente({ nome, telefone: tel, docTipo: 'CPF', doc: $('#nc-doc', el).value.trim(), aparelhos: [] }).id;
+      } else if (!clienteId) clienteNome = $('#nc-final', el)?.value.trim() || '';
+      if (!clienteId && sale.itens.some(i => i.seminovo) && !clienteNome) {
+        if (!confirm('Venda de celular seminovo sem cliente: o termo de garantia sai sem nome. Continuar?')) return;
+      }
+      // produtos cadastrados na hora entram no cadastro (e saem do estoque com a venda)
+      for (const i of sale.itens.filter(i => i.novo)) {
+        if (!i.salvar) { i.avulso = true; continue; }
+        const p = { id: uid(), nome: i.nome, preco: i.preco, custo: i.custo, qtd: 0, minimo: i.aparelho ? 0 : 1, tipoProduto: i.tipoProduto, seminovo: i.seminovo,
+          categoria: i.seminovo ? 'Celulares seminovos' : i.aparelho ? 'Celulares novos' : '', imei: i.imei, cor: i.cor, armazenamento: i.armazenamento, bateria: i.bateria,
+          garantiaDias: i.garantiaDias, statusAparelho: 'disponivel', criadoEm: nowISO(), entradaEm: nowISO() };
+        Store.db.produtos.push(p);
+        Store.movimentar('produto', p, i.qtd, 'Cadastrado na venda');
+        i.id = p.id;
+      }
+      const v = this.registrar({ itens: sale.itens.map(({ novo, salvar, ...i }) => i), clienteId, clienteNome, desconto: desc, forma: $('#nv-forma', el).value, troca: tr });
+      this.cart = []; m.close(); App.refresh();
+      this.recibo(v);
+    };
+  },
+
+  checkout() { this.novaVenda(); },
 
   recibo(v) {
     const c = v.clienteId && Store.cliente(v.clienteId);
