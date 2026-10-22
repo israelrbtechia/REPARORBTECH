@@ -1,6 +1,7 @@
 /* Shell do app: login, menu lateral e roteamento */
 const SESSION_KEY = 'rbtech_session';
 
+const APP_VERSAO = '24';
 const NAV = [
   ['Gestão Operacional', [
     ['dashboard', 'Dashboard', 'dash'],
@@ -31,7 +32,12 @@ const App = {
 
   async start() {
     addEventListener('hashchange', () => this.render());
-    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      // versão nova publicada: recarrega sozinho uma vez para usar o código novo
+      const tinha = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (tinha && !window._recarregou) { window._recarregou = true; location.reload(); } });
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => { r.update().catch(() => {}); setInterval(() => r.update().catch(() => {}), 30 * 60000); }).catch(() => {});
+    }
     if (Cloud.enabled) {
       $('#app').innerHTML = `<div class="login"><img class="login-logo" src="assets/logo.jpg" alt="RB Tech" style="width:160px"></div>`;
       try { await Cloud.init(); } catch (e) { console.warn(e); }

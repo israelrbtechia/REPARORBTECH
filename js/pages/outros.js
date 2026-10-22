@@ -402,6 +402,8 @@ ${dono ? `      <div class="card mb" id="cf-loja">
         <h3>${icon('lock', 'sm')} Acesso</h3>
         <div class="kv"><span class="k">E-mail</span><span class="v">${esc(App.userEmail())}</span></div>
         <div class="grid grid-2 mt"><button class="btn" onclick="Pages.config.senha()">${icon('lock')} Alterar senha</button><button class="btn" onclick="Pages.config.auditoria()">${icon('shield')} Auditoria</button></div>
+        <div class="kv mt"><span class="k">Versão do app</span><span class="v">v${APP_VERSAO}</span></div>
+        <button class="btn block mt" onclick="Pages.config.atualizarApp()">${icon('repeat')} Atualizar app agora</button>
         <button class="btn block mt" onclick="App.logout()">${icon('logout')} Sair</button>
       </div>
 
@@ -558,6 +560,15 @@ ${dono ? `      <div class="card mb" id="cf-loja">
         else toast('Teste enviado. Confira a caixa de entrada em instantes.');
       } catch (err) { toast(err.message, true); } finally { b.disabled = false; }
     };
+  },
+  // Apaga o cache do app e baixa a versão mais nova (os dados continuam salvos)
+  async atualizarApp() {
+    try {
+      await Cloud.push?.().catch(() => {});
+      if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+      if (navigator.serviceWorker) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+    } catch {}
+    location.reload();
   },
   async novoCodigo() {
     if (!(await confirmDialog('Gerar um novo código? O código atual deixa de funcionar (quem já está na equipe continua).', { ok: 'Gerar' }))) return;
