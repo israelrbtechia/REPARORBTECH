@@ -22,21 +22,7 @@ const Pdf = {
     const logo = await this.carregarLogo();
     const L = d.loja || {};
 
-    // Cabeçalho preto com faixa dourada
-    doc.setFillColor(...BLACK); doc.rect(0, 0, W, 40, 'F');
-    doc.setFillColor(...GOLD); doc.rect(0, 40, W, 1.6, 'F');
-    if (logo) doc.addImage(logo, 'PNG', M, 6, 28, 28);
-    const xT = logo ? M + 33 : M;
-    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(L.nome || 'RB Tech Celulares', xT, 16);
-    doc.setTextColor(225, 225, 225); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-    const info = [L.cnpj && 'CNPJ ' + L.cnpj, L.telefone, L.instagram].filter(Boolean).join('  ·  ');
-    if (info) doc.text(info, xT, 23);
-    if (L.endereco) doc.text(doc.splitTextToSize(L.endereco, 105), xT, 28);
-    doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.text('TERMO DE GARANTIA', W - M, 14, { align: 'right' });
-    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-    doc.text(d.tipo === 'venda' ? `VENDA #${d.numero}` : `OS #${d.numero}`, W - M, 22, { align: 'right' });
-    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-    doc.text('Emitido em ' + fmtDateTime(new Date()), W - M, 28, { align: 'right' });
+    this.cabecalho(doc, logo, L, 'TERMO DE GARANTIA', d.tipo === 'venda' ? `VENDA #${d.numero}` : `OS #${d.numero}`);
 
     let y = 52;
     // Selo da garantia
@@ -120,6 +106,90 @@ const Pdf = {
     doc.setFillColor(...BLACK); doc.rect(0, 285, W, 12, 'F');
     doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
     doc.text(`Obrigado pela preferência! ${L.nome || ''}`, W / 2, 292, { align: 'center' });
+    return doc;
+  },
+
+  // Cabeçalho preto com logo, dados da loja e número do documento
+  cabecalho(doc, logo, L, titulo, numero) {
+    const W = 210, M = 14, GOLD = [212, 175, 55];
+    doc.setFillColor(0, 0, 0); doc.rect(0, 0, W, 40, 'F');
+    doc.setFillColor(...GOLD); doc.rect(0, 40, W, 1.6, 'F');
+    if (logo) doc.addImage(logo, 'PNG', M, 6, 28, 28);
+    const xT = logo ? M + 33 : M;
+    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(L.nome || 'RB Tech Celulares', xT, 16);
+    doc.setTextColor(225, 225, 225); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+    const info = [L.cnpj && 'CNPJ ' + L.cnpj, L.telefone, L.instagram].filter(Boolean).join('  ·  ');
+    if (info) doc.text(info, xT, 23);
+    if (L.endereco) doc.text(doc.splitTextToSize(L.endereco, 105), xT, 28);
+    doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.text(titulo, W - M, 14, { align: 'right' });
+    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(numero, W - M, 22, { align: 'right' });
+    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text('Emitido em ' + fmtDateTime(new Date()), W - M, 28, { align: 'right' });
+  },
+
+  /* Ordem de serviço de entrada (1 via) */
+  async ordem(o) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, M = 14, GOLD = [212, 175, 55], BLACK = [0, 0, 0], GRAY = [90, 90, 90];
+    const s = Store.s, c = Store.cliente(o.clienteId) || {}, a = o.aparelho || {};
+    const tec = s.tecnicos.find(t => t.id === o.tecnicoId);
+    const L = { nome: s.loja, cnpj: s.cnpj, telefone: s.telefone, endereco: s.endereco, instagram: s.instagram };
+    this.cabecalho(doc, await this.carregarLogo(), L, 'ORDEM DE SERVIÇO', `OS #${o.numero}`);
+    let y = 52;
+    const titulo = t => { y += 3; doc.setTextColor(...BLACK); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(t.toUpperCase(), M, y); doc.setDrawColor(...GOLD); doc.setLineWidth(0.6); doc.line(M, y + 1.8, W - M, y + 1.8); y += 7; };
+    const kv = pares => {
+      doc.setFontSize(9.5);
+      for (let i = 0; i < pares.length; i += 2) {
+        let h = 1;
+        [pares[i], pares[i + 1]].forEach((p, j) => {
+          if (!p) return; const x = M + j * 92;
+          doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK); doc.text(p[0] + ':', x, y);
+          doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 40, 40);
+          const t = doc.splitTextToSize(String(p[1] || '—'), 62); doc.text(t, x + 26, y); h = Math.max(h, t.length);
+        });
+        y += 5 * h + 1;
+      }
+    };
+    const linha = (k, v) => { doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK); doc.setFontSize(9.5); doc.text(k + ':', M, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 40, 40); const t = doc.splitTextToSize(String(v || '—'), W - 2 * M - 28); doc.text(t, M + 28, y); y += 5 * t.length + 1; };
+
+    titulo('Cliente');
+    kv([['Nome', c.nome], [c.docTipo || 'Documento', c.doc], ['Telefone', fmtPhone(c.telefone)], ['E-mail', c.email]]);
+    titulo('Aparelho');
+    const tipo = (TIPOS_APARELHO.find(t => t[0] === a.tipo) || [])[1];
+    kv([['Modelo', (a.modelo || '—') + (tipo ? ` (${tipo})` : '')], [a.idTipo === 'serial' ? 'Serial' : 'IMEI', a.imei], ['Cor', a.cor], ['Senha', o.senha], ['Acessórios', o.acessorios || 'Nenhum']]);
+    titulo('Serviço');
+    linha('Defeito', o.defeito); linha('Serviço', o.servico); if (o.obs) linha('Obs.', o.obs);
+    kv([['Entrada', fmtDateTime(o.criadoEm)], ['Previsão', fmtDate(o.previsao)], ['Técnico', tec?.nome], ['Status', OS_STATUS[o.status]?.label], ['Garantia', '3 meses após a conclusão']]);
+    if (o.checklist && Object.keys(o.checklist).length) {
+      titulo('Checklist de entrada');
+      doc.setFontSize(8.5);
+      CHECKLIST_ITENS.forEach((it, i) => {
+        const v = o.checklist[it]; const x = M + (i % 3) * 62, yy = y + Math.floor(i / 3) * 5;
+        doc.setTextColor(...(v === 'nok' ? [200, 40, 40] : v === 'ok' ? [20, 130, 60] : GRAY));
+        doc.text(`${v === 'ok' ? '[OK]' : v === 'nok' ? '[X]' : '[ ]'} ${it}`, x, yy);
+      });
+      y += Math.ceil(CHECKLIST_ITENS.length / 3) * 5 + 2;
+    }
+    y += 2;
+    doc.setFillColor(0, 0, 0); doc.roundedRect(M, y, W - 2 * M, 13, 2, 2, 'F');
+    doc.setTextColor(200, 200, 200); doc.setFontSize(9); doc.text('VALOR DO SERVIÇO', M + 6, y + 8.3);
+    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text(money(Store.osTotal(o)), W - M - 6, y + 8.8, { align: 'right' });
+    y += 20;
+    titulo('Termos');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(50, 50, 50);
+    const termos = doc.splitTextToSize(s.termosEntrada || '', W - 2 * M); doc.text(termos, M, y, { lineHeightFactor: 1.35 }); y += termos.length * 4.1 + 4;
+    if (Cloud.loja && o.token) { doc.setTextColor(...BLACK); doc.setFont('helvetica', 'bold'); doc.text('Acompanhe em tempo real: ', M, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 80, 200); doc.textWithLink(Store.linkOS(o), M + 42, y, { url: Store.linkOS(o) }); y += 6; }
+    y = Math.max(y + 22, 255);
+    const sig = (img, label, x) => {
+      if (img) try { doc.addImage(img, 'PNG', x + 15, y - 17, 50, 16); } catch {}
+      doc.setDrawColor(...BLACK); doc.setLineWidth(0.3); doc.line(x, y, x + 80, y);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY); doc.text(label, x + 40, y + 4.5, { align: 'center' });
+    };
+    sig(o.assinaturaCliente, 'Assinatura do cliente', M);
+    sig(tec?.assinatura || s.assinaturaDono, s.loja, W - M - 80);
+    doc.setFillColor(0, 0, 0); doc.rect(0, 285, W, 12, 'F');
+    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(`Obrigado pela preferência! ${s.loja}`, W / 2, 292, { align: 'center' });
     return doc;
   },
 

@@ -1,35 +1,163 @@
 /* Pós-Venda, Serviços, Relatórios e Configurações */
 
+/* Pós-Venda: feedback após 7 dias e oferta de capa/película após 30 dias,
+   para reparos entregues (OS pagas) e vendas de aparelhos */
+const MSG_FEEDBACK_PADRAO = 'Olá {nome}! Aqui é da {loja} 😊\n\nJá faz {dias} dias desde {motivo} *{aparelho}*. Como ele está se saindo? Ficou tudo certinho?\n\nSua opinião é muito importante pra gente! 💛{avaliacao}';
+const MSG_OFERTA_PADRAO = 'Olá {nome}! Aqui é da {loja} 📱\n\nPara manter seu *{aparelho}* sempre protegido, separamos uma condição especial pra você: *capa + película com {desconto} de desconto* 🛡️\n\nQuer que eu separe? É só responder aqui!';
+
+const PosVenda = {
+  // Reparos entregues e vendas de aparelhos, com a data de referência
+  compras() {
+    const out = [], hoje = new Date();
+    for (const o of Store.db.os) {
+      if (o.deleted || o.status !== 'pago') continue;
+      const data = o.entregueEm || o.pagoEm; if (!data) continue;
+      out.push({ key: 'os:' + o.id, tipo: 'os', ref: o, cliente: Store.cliente(o.clienteId), aparelho: o.aparelho?.modelo || 'aparelho', data, dias: daysBetween(data, hoje), titulo: `Reparo · OS #${o.numero}`, motivo: 'o reparo do seu' });
+    }
+    for (const v of Store.db.vendas) {
+      if (v.cancelada) continue;
+      const aps = v.itens.filter(i => i.seminovo); if (!aps.length) continue;
+      const c = v.clienteId ? Store.cliente(v.clienteId) : null;
+      out.push({ key: 'venda:' + v.id, tipo: 'venda', ref: v, cliente: c, nomeAvulso: v.clienteNome, aparelho: aps.map(i => i.nome).join(' e '), data: v.data, dias: daysBetween(v.data, hoje), titulo: `Compra · Venda #${v.numero}`, motivo: 'a compra do seu' });
+    }
+    return out.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  },
+  estado(ref) {
+    if (typeof ref.posVenda === 'string') ref.posVenda = { feedback: ref.posVenda }; // formato antigo
+    return ref.posVenda || {};
+  },
+  feedback() { return this.compras().filter(x => x.dias >= 7 && x.dias <= 60 && !this.estado(x.ref).feedback); },
+  oferta() { return this.compras().filter(x => x.dias >= 30 && x.dias <= 120 && !this.estado(x.ref).oferta); },
+  pendentes() { return this.feedback().length + this.oferta().length; },
+
+  mensagem(tipo, x) {
+    const s = Store.s;
+    const nome = String(x.cliente?.nome || x.nomeAvulso || '').split(' ')[0];
+    const tpl = (tipo === 'feedback' ? s.msgFeedback : s.msgOferta) || (tipo === 'feedback' ? MSG_FEEDBACK_PADRAO : MSG_OFERTA_PADRAO);
+    return tpl.replace(/\{nome\}/g, nome).replace(/\{loja\}/g, s.loja).replace(/\{aparelho\}/g, x.aparelho).replace(/\{dias\}/g, x.dias)
+      .replace(/\{motivo\}/g, x.motivo).replace(/\{desconto\}/g, s.descontoOferta || '10%')
+      .replace(/\{avaliacao\}/g, s.googleReview ? `\n\nSe puder, deixe sua avaliação no Google, ajuda muito: ${s.googleReview}` : '')
+      .replace(/Olá !/g, 'Olá!').replace(/\n{3,}/g, '\n\n').trim();
+  },
+};
+
 Pages.posvenda = {
-  tab: 'followup',
+  tab: 'feedback',
   render(main) {
     const s = Store.s;
     const os = Store.db.os.filter(o => !o.deleted);
     const hoje = new Date();
-    const follow = os.filter(o => o.status === 'pago' && !o.posVenda && o.pagoEm && daysBetween(o.pagoEm, hoje) >= 2 && daysBetween(o.pagoEm, hoje) <= 30);
-    const garantias = os.filter(o => ['concluido', 'pago'].includes(o.status) && Store.garantiaFim(o) && (() => { const d = daysBetween(hoje, Store.garantiaFim(o)); return d >= 0 && d <= 10; })());
+    const feedback = PosVenda.feedback(), oferta = PosVenda.oferta();
+    const garantias = [
+      ...os.filter(o => ['concluido', 'pago'].includes(o.status) && Store.garantiaFim(o)).map(o => ({ c: Store.cliente(o.clienteId), fim: Store.garantiaFim(o), ap: o.aparelho?.modelo, ref: `OS #${o.numero}`, tipo: 'serviço' })),
+      ...Store.db.vendas.filter(v => !v.cancelada).flatMap(v => v.itens.filter(i => i.seminovo).map(i => ({ c: v.clienteId ? Store.cliente(v.clienteId) : null, fim: addDays(v.data, GARANTIA_SEMINOVO_DIAS), ap: i.nome, ref: `Venda #${v.numero}`, tipo: 'aparelho' }))),
+    ].filter(g => { const d = daysBetween(hoje, g.fim); return d >= 0 && d <= 10; });
     const paradas = os.filter(o => o.status === 'concluido' && daysBetween(o.concluidoEm || o.criadoEm, hoje) >= 3);
     const mes = pad(hoje.getMonth() + 1);
     const aniver = Store.clientesAtivos().filter(c => c.nascimento && c.nascimento.slice(5, 7) === mes).sort((a, b) => a.nascimento.slice(8).localeCompare(b.nascimento.slice(8)));
-    const tabs = [['followup', 'Acompanhamento', follow.length], ['retirada', 'Não retirados', paradas.length], ['garantia', 'Garantia acabando', garantias.length], ['aniver', 'Aniversariantes', aniver.length]];
+    const tabs = [['feedback', 'Feedback · 7 dias', feedback.length], ['oferta', 'Capa/película · 30 dias', oferta.length], ['retirada', 'Não retirados', paradas.length], ['garantia', 'Garantia acabando', garantias.length], ['aniver', 'Aniversariantes', aniver.length]];
     const nome = c => (c?.nome || '').split(' ')[0];
-    const row = (c, title, sub, msg, extra = '') => `<div class="item" style="cursor:default"><div class="row"><div class="avatar">${esc((c?.nome || '?')[0].toUpperCase())}</div>
+    const row = (c, title, sub, msg) => `<div class="item" style="cursor:default"><div class="row"><div class="avatar">${esc((c?.nome || '?')[0].toUpperCase())}</div>
       <div class="grow"><b>${esc(title)}</b><div class="small muted">${sub}</div></div>
-      ${c?.telefone ? `<a class="btn sm success" target="_blank" href="${waLink(c.telefone, msg)}">${icon('whatsapp', 'sm')}</a>` : '<span class="xs muted">sem tel.</span>'}${extra}</div></div>`;
-    let list = '';
-    if (this.tab === 'followup') list = follow.map(o => { const c = Store.cliente(o.clienteId); return row(c, c?.nome, `OS #${o.numero} · ${esc(o.aparelho?.modelo)} · pago há ${daysBetween(o.pagoEm, hoje)} dias`, `Olá ${nome(c)}! Aqui é da ${s.loja} 😊\n\nPassando para saber como está seu *${o.aparelho?.modelo}* depois do serviço. Ficou tudo certinho?\n\n${s.googleReview ? `Se puder, deixe sua avaliação, ajuda muito a gente: ${s.googleReview}` : 'Qualquer coisa estamos à disposição!'}`, `<button class="btn sm" onclick="Pages.posvenda.feito('${o.id}')">${icon('check', 'sm')}</button>`); }).join('');
-    if (this.tab === 'retirada') list = paradas.map(o => { const c = Store.cliente(o.clienteId); return row(c, c?.nome, `OS #${o.numero} · ${esc(o.aparelho?.modelo)} · pronto há ${daysBetween(o.concluidoEm || o.criadoEm, hoje)} dias · ${money(Store.osTotal(o))}`, OSPage.msgPronto(o, c)); }).join('');
-    if (this.tab === 'garantia') list = garantias.map(o => { const c = Store.cliente(o.clienteId); const fim = Store.garantiaFim(o); return row(c, c?.nome, `OS #${o.numero} · garantia até ${fmtDate(fim)}`, `Olá ${nome(c)}! Aqui é da ${s.loja}.\n\nA garantia do serviço no seu *${o.aparelho?.modelo}* vence em ${fmtDate(fim)}. Está tudo funcionando bem? Se notar algo, traga para avaliarmos sem custo antes do vencimento!`); }).join('');
-    if (this.tab === 'aniver') list = aniver.map(c => row(c, c.nome, `🎂 ${c.nascimento.slice(8)}/${mes}`, `Feliz aniversário, ${nome(c)}! 🎉🎂\n\nA equipe ${s.loja} deseja muitas felicidades! Como presente, você tem *10% de desconto* em qualquer serviço ou acessório este mês.`)).join('');
+      ${c?.telefone ? `<a class="btn sm success" target="_blank" href="${waLink(c.telefone, msg)}">${icon('whatsapp', 'sm')}</a>` : '<span class="xs muted">sem tel.</span>'}</div></div>`;
+
+    let body = '';
+    if (this.tab === 'feedback' || this.tab === 'oferta') body = this.campanha(this.tab, this.tab === 'feedback' ? feedback : oferta);
+    else {
+      let list = '';
+      if (this.tab === 'retirada') list = paradas.map(o => { const c = Store.cliente(o.clienteId); return row(c, c?.nome, `OS #${o.numero} · ${esc(o.aparelho?.modelo)} · pronto há ${daysBetween(o.concluidoEm || o.criadoEm, hoje)} dias · ${money(Store.osTotal(o))}`, OSPage.msgPronto(o, c)); }).join('');
+      if (this.tab === 'garantia') list = garantias.map(g => row(g.c, g.c?.nome || 'Consumidor', `${g.ref} · ${esc(g.ap)} · garantia do ${g.tipo} até ${fmtDate(g.fim)}`, `Olá ${nome(g.c)}! Aqui é da ${s.loja}.\n\nA garantia do seu *${g.ap}* vence em ${fmtDate(g.fim)}. Está tudo funcionando bem? Se notar algo, traga para avaliarmos sem custo antes do vencimento!`)).join('');
+      if (this.tab === 'aniver') list = aniver.map(c => row(c, c.nome, `🎂 ${c.nascimento.slice(8)}/${mes}`, `Feliz aniversário, ${nome(c)}! 🎉🎂\n\nA equipe ${s.loja} deseja muitas felicidades! Como presente, você tem *10% de desconto* em qualquer serviço ou acessório este mês.`)).join('');
+      body = `<div class="card pad-0">${list || `<div class="empty">${icon('checkCircle')}<div>Nada pendente aqui. 👌</div></div>`}</div>`;
+    }
 
     main.innerHTML = `
-      ${pageHead('chat', 'Pós-Venda', 'Fidelize clientes com mensagens no momento certo.')}
-      ${!s.googleReview ? `<div class="info-box">${icon('star')}<span>Adicione o link de avaliação do Google em <a href="#/config">Configurações</a> para pedir avaliações automaticamente.</span></div>` : ''}
+      ${pageHead('chat', 'Pós-Venda', 'Fidelize clientes de reparos e de vendas de aparelhos com a mensagem certa, na hora certa.')}
       <div class="tabs mb" id="pv-tabs">${tabs.map(([k, l, n]) => `<button data-k="${k}" class="${this.tab === k ? 'on' : ''}">${l} ${n ? `<span class="pill gold xs" style="padding:1px 7px">${n}</span>` : ''}</button>`).join('')}</div>
-      <div class="card pad-0">${list || `<div class="empty">${icon('checkCircle')}<div>Nada pendente aqui. 👌</div></div>`}</div>`;
+      ${body}`;
     $$('#pv-tabs button').forEach(b => b.onclick = () => { this.tab = b.dataset.k; App.refresh(); });
   },
-  feito(id) { const o = Store.osById(id); o.posVenda = nowISO(); Store.save(); App.refresh(); toast('Marcado como contatado'); },
+
+  campanha(tipo, lista) {
+    const fb = tipo === 'feedback';
+    const enviados = PosVenda.compras().filter(x => PosVenda.estado(x.ref)[tipo] && PosVenda.estado(x.ref)[tipo] !== 'pulado')
+      .sort((a, b) => String(PosVenda.estado(b.ref)[tipo]).localeCompare(String(PosVenda.estado(a.ref)[tipo]))).slice(0, 15);
+    return `
+      <div class="card mb">
+        <div class="row" style="align-items:flex-start"><div class="stat-icon"><div class="ic">${icon(fb ? 'star' : 'tag')}</div></div>
+          <div class="grow"><b>${fb ? 'Como está indo o aparelho?' : 'Oferta de capa e película'}</b>
+          <div class="small muted">${fb ? 'Clientes com <b>7 dias ou mais</b> desde o reparo entregue ou a compra do aparelho.' : 'Clientes com <b>30 dias ou mais</b> desde o reparo ou a compra: ofereça proteção para o aparelho.'} Toque em <b class="green">Enviar</b>: o WhatsApp abre com a mensagem pronta e o cliente sai da lista.</div></div></div>
+        <div class="row wrap mt"><button class="btn sm outline-gold" onclick="Pages.posvenda.editarMsg('${tipo}')">${icon('edit', 'sm')} Personalizar mensagem</button>
+          ${lista[0] ? `<button class="btn sm" onclick="Pages.posvenda.previa('${tipo}')">${icon('eye', 'sm')} Ver exemplo</button>` : ''}</div>
+      </div>
+      <div class="card pad-0 mb"><div class="list-head"><b>${lista.length} cliente(s) para ${fb ? 'pedir feedback' : 'oferecer capa/película'}</b></div>
+      ${lista.map(x => {
+        const c = x.cliente, n = c?.nome || x.nomeAvulso || 'Cliente sem cadastro';
+        return `<div class="item" style="cursor:default"><div class="row">
+          <div class="avatar">${esc(n[0].toUpperCase())}</div>
+          <div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(n)}</b>
+            <div class="small gold ellipsis">${esc(x.aparelho)}</div>
+            <div class="xs muted">${x.titulo} · há ${x.dias} dias (${fmtDate(x.data)})</div></div>
+          <div class="col" style="gap:6px;align-items:flex-end">
+            ${c?.telefone ? `<button class="btn sm success" onclick="Pages.posvenda.enviar('${tipo}','${x.key}')">${icon('whatsapp', 'sm')} Enviar</button>`
+              : c ? `<button class="btn sm outline-gold" onclick="Pages.posvenda.addTelefone('${c.id}')">${icon('plus', 'sm')} WhatsApp</button>` : '<span class="xs muted">sem cadastro</span>'}
+            <button class="btn sm ghost" style="min-height:28px;padding:2px 8px" onclick="Pages.posvenda.marcar('${tipo}','${x.key}','pulado')">Pular</button>
+          </div></div></div>`;
+      }).join('') || `<div class="empty">${icon('checkCircle')}<div>Ninguém pendente. Volte amanhã! 👌</div></div>`}</div>
+      ${enviados.length ? `<details class="card"><summary class="bold" style="cursor:pointer">${icon('history', 'sm')} Enviados recentemente</summary>
+        ${enviados.map(x => `<div class="cart-line"><div class="grow"><b>${esc(x.cliente?.nome || x.nomeAvulso || '')}</b><div class="xs muted">${esc(x.aparelho)} · enviado ${fmtDateTime(PosVenda.estado(x.ref)[tipo])}</div></div>
+          <button class="btn sm ghost" onclick="Pages.posvenda.marcar('${tipo}','${x.key}',null)">${icon('undo', 'sm')} Desfazer</button></div>`).join('')}</details>` : ''}`;
+  },
+
+  achar(key) { return PosVenda.compras().find(x => x.key === key); },
+
+  // Um clique: abre o WhatsApp com a mensagem e tira o cliente da lista
+  enviar(tipo, key) {
+    const x = this.achar(key); if (!x) return;
+    window.open(waLink(x.cliente.telefone, PosVenda.mensagem(tipo, x)), '_blank');
+    this.marcar(tipo, key, nowISO(), true);
+    toast(`${tipo === 'feedback' ? 'Feedback' : 'Oferta'} enviado para ${x.cliente.nome.split(' ')[0]}`);
+  },
+  marcar(tipo, key, valor, silencioso) {
+    const x = this.achar(key); if (!x) return;
+    const st = PosVenda.estado(x.ref);
+    if (valor) st[tipo] = valor; else delete st[tipo];
+    x.ref.posVenda = st;
+    Store.save(); App.refresh();
+    if (!silencioso) toast(valor === 'pulado' ? 'Cliente pulado' : valor ? 'Marcado como enviado' : 'Voltou para a lista');
+  },
+  addTelefone(clienteId) {
+    const c = Store.cliente(clienteId);
+    openModal({
+      title: 'WhatsApp do cliente', icon: 'phone', subtitle: c.nome,
+      body: field('WhatsApp / Telefone', '<input class="input" id="pt-tel" type="tel" inputmode="tel" placeholder="(47) 99999-9999">'),
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="pt-ok">Salvar</button>`,
+      onMount: (el, m) => { $('#pt-tel', el).focus(); $('#pt-ok', el).onclick = () => { const d = onlyDigits($('#pt-tel', el).value); if (d.length < 10) return toast('Telefone inválido', true); c.telefone = d; Store.saveCliente(c); m.close(); App.refresh(); toast('Telefone salvo'); }; },
+    });
+  },
+  previa(tipo) {
+    const x = (tipo === 'feedback' ? PosVenda.feedback() : PosVenda.oferta())[0];
+    openModal({ title: 'Exemplo da mensagem', icon: 'whatsapp', subtitle: x.cliente?.nome || x.nomeAvulso, body: `<div class="card" style="white-space:pre-wrap;background:#0b1a12;border-color:#1f3d2b">${esc(PosVenda.mensagem(tipo, x))}</div>` });
+  },
+  editarMsg(tipo) {
+    const s = Store.s, fb = tipo === 'feedback';
+    const campo = fb ? 'msgFeedback' : 'msgOferta', padrao = fb ? MSG_FEEDBACK_PADRAO : MSG_OFERTA_PADRAO;
+    const exemplo = { cliente: { nome: 'Maria Souza' }, aparelho: 'iPhone 13', dias: fb ? 7 : 30, motivo: 'a compra do seu' };
+    openModal({
+      title: fb ? 'Mensagem de feedback (7 dias)' : 'Mensagem de oferta (30 dias)', icon: 'edit',
+      body: `<p class="small muted" style="margin-top:0">Use as variáveis: <b class="gold">{nome}</b> primeiro nome · <b class="gold">{aparelho}</b> · <b class="gold">{dias}</b> · <b class="gold">{motivo}</b> ("o reparo do seu" / "a compra do seu") · <b class="gold">{loja}</b>${fb ? ' · <b class="gold">{avaliacao}</b> link do Google' : ' · <b class="gold">{desconto}</b>'}. Use *texto* para negrito no WhatsApp.</p>
+        ${field('Mensagem', `<textarea class="input" id="pm-txt" style="min-height:170px">${esc(s[campo] || padrao)}</textarea>`)}
+        ${fb ? '' : field('Desconto oferecido', `<input class="input" id="pm-desc" value="${esc(s.descontoOferta || '10%')}" placeholder="Ex: 10%, R$ 15">`)}
+        <div class="lbl mb">Prévia</div><div class="card" id="pm-prev" style="white-space:pre-wrap;background:#0b1a12;border-color:#1f3d2b"></div>`,
+      foot: `<button class="btn" id="pm-reset">Restaurar padrão</button><button class="btn primary" id="pm-ok">${icon('check')} Salvar</button>`,
+      onMount: (el, m) => {
+        const prev = () => { const old = s[campo], oldD = s.descontoOferta; s[campo] = $('#pm-txt', el).value; if ($('#pm-desc', el)) s.descontoOferta = $('#pm-desc', el).value; $('#pm-prev', el).textContent = PosVenda.mensagem(tipo, exemplo); s[campo] = old; s.descontoOferta = oldD; };
+        $('#pm-txt', el).oninput = prev; if ($('#pm-desc', el)) $('#pm-desc', el).oninput = prev; prev();
+        $('#pm-reset', el).onclick = () => { $('#pm-txt', el).value = padrao; prev(); };
+        $('#pm-ok', el).onclick = () => { s[campo] = $('#pm-txt', el).value.trim(); if ($('#pm-desc', el)) s.descontoOferta = $('#pm-desc', el).value.trim(); Store.save(); m.close(); App.refresh(); toast('Mensagem salva'); };
+      },
+    });
+  },
 };
 
 Pages.servicos = {

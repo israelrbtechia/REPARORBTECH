@@ -1,5 +1,5 @@
 /* Cache offline do app */
-const CACHE = 'rbtech-v3';
+const CACHE = 'rbtech-v4';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/vendor/supabase.js', 'js/cloud.js', 'js/vendor/jspdf.umd.min.js', 'js/pdf.js',

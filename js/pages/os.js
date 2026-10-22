@@ -135,6 +135,16 @@ const OSPage = {
     window.open(waLink(c.telefone, msg), '_blank');
   },
 
+  /* ---------- PDF da OS (1 via) ---------- */
+  async pdfOS(id, compartilhar) {
+    const o = Store.osById(id);
+    if (Cloud.loja) Store.tokenOS(o); // inclui o link de acompanhamento no PDF
+    toast('Gerando PDF da OS...');
+    const doc = await Pdf.ordem(o);
+    const nome = `os-${o.numero}.pdf`;
+    if (compartilhar) await Pdf.compartilhar(doc, nome, `OS #${o.numero} — ${Store.s.loja}`); else Pdf.baixar(doc, nome);
+  },
+
   /* ---------- PDF de garantia ---------- */
   async pdfGarantia(id, compartilhar) {
     const o = Store.osById(id);
@@ -333,7 +343,7 @@ const OSPage = {
         <div class="col" id="pc-acoes">
           ${c.telefone ? `<button class="btn success" style="min-height:54px;font-size:16px" onclick="OSPage.abrirWhats('${o.id}','entrada')">${icon('whatsapp')} ${this.link(o) ? 'Enviar link pelo WhatsApp' : 'Enviar comprovante no WhatsApp'}</button>` : `<div class="info-box">${icon('info')}<span>Cliente sem telefone: cadastre o WhatsApp para enviar o link.</span></div>`}
           ${this.link(o) ? `<button class="btn outline-gold" onclick="OSPage.copiarLink('${o.id}')">${icon('repeat')} Copiar link de acompanhamento</button>` : `<div class="xs muted">Ligue a nuvem (Supabase) para enviar o link de acompanhamento em tempo real.</div>`}
-          <button class="btn" onclick="Print.os(Store.osById('${o.id}'))">${icon('printer')} Imprimir OS (2 vias)</button>
+          <div class="grid grid-2"><button class="btn" onclick="OSPage.pdfOS('${o.id}', true)">${icon('upload')} PDF da OS</button><button class="btn" onclick="Print.os(Store.osById('${o.id}'))">${icon('printer')} Imprimir OS</button></div>
           <button class="btn" onclick="Print.osEtiqueta(Store.osById('${o.id}'))">${icon('tag')} Imprimir etiqueta do aparelho</button>
           <button class="btn" onclick="OSPage.assinaturaCliente('${o.id}')">${icon('pen')} Coletar assinatura do cliente</button>
         </div>`,
@@ -461,6 +471,7 @@ const OSPage = {
       foot: o.deleted
         ? `<button class="btn outline-gold" onclick="OSPage.restaurar('${o.id}')">${icon('undo')} Restaurar</button><button class="btn danger" onclick="OSPage.excluirDef('${o.id}')">${icon('trash')} Excluir definitivamente</button>`
         : `${o.status !== 'pago' ? `<button class="btn primary" onclick="OSPage.pagamento(Store.osById('${o.id}'))">${icon('dollar')} Receber</button>` : `<button class="btn primary" onclick="OSPage.garantiaModal(Store.osById('${o.id}'))">${icon('shieldCheck')} Garantia</button>`}
+          <button class="btn" onclick="OSPage.pdfOS('${o.id}', true)">${icon('file')} PDF da OS</button>
           <button class="btn" onclick="Print.os(Store.osById('${o.id}'))">${icon('printer')} Imprimir</button>
           ${c.telefone ? `<button class="btn success" onclick="OSPage.abrirWhats('${o.id}','${o.status === 'concluido' ? 'pronto' : 'status'}')">${icon('whatsapp')} WhatsApp</button>` : ''}
           <button class="btn" onclick="OSPage.editar('${o.id}')">${icon('edit')} Editar</button>

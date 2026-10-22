@@ -75,8 +75,8 @@ const Print = {
     const c = Store.cliente(o.clienteId);
     const s = Store.s;
     const tec = s.tecnicos.find(t => t.id === o.tecnicoId);
-    const via = (nome) => `
-      ${this.header('Ordem de Serviço — ' + nome, o.numero)}
+    this.run(`
+      ${this.header('Ordem de Serviço', o.numero)}
       ${this.clienteBlock(c)}
       ${this.aparelhoBlock(o.aparelho)}
       <div class="g2"><div class="pkv"><b>Senha:</b> ${esc(o.senha || '—')}</div><div class="pkv"><b>Acessórios:</b> ${esc(o.acessorios || 'Nenhum')}</div></div>
@@ -89,8 +89,7 @@ const Print = {
       ${o.checklist && Object.keys(o.checklist).length ? `<h3>Checklist de entrada</h3><div class="chk">${CHECKLIST_ITENS.map(i => `<div>${o.checklist[i] === 'ok' ? '☑' : o.checklist[i] === 'nok' ? '☒' : '☐'} ${esc(i)}</div>`).join('')}</div>` : ''}
       <div class="total">Valor: ${money(Store.osTotal(o))}${o.desconto ? ` <span style="font-size:11px;font-weight:400">(desconto ${money(o.desconto)})</span>` : ''}</div>
       <h3>Termos</h3><div class="terms">${esc(s.termosEntrada)}</div>
-      <div class="sigs"><div class="sig">${this.sigImg(o.assinaturaCliente)}Assinatura do cliente</div><div class="sig">${this.sigImg(tec?.assinatura || s.assinaturaDono)}${esc(s.loja)}</div></div>`;
-    this.run(via('Via da loja') + '<div class="cut"></div>' + via('Via do cliente'));
+      <div class="sigs"><div class="sig">${this.sigImg(o.assinaturaCliente)}Assinatura do cliente</div><div class="sig">${this.sigImg(tec?.assinatura || s.assinaturaDono)}${esc(s.loja)}</div></div>`);
   },
 
   orcamento(orc) {

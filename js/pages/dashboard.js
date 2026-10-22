@@ -57,6 +57,9 @@ Pages.dashboard = {
           </div>`).join('')}
       </div>
 
+      ${(() => { const f = PosVenda.feedback().length, o = PosVenda.oferta().length; return f + o ? `<div class="card mb row" style="cursor:pointer;border-color:rgba(74,222,128,.35)" onclick="App.go('posvenda')">
+        <div class="stat-icon"><div class="ic" style="color:var(--green);background:rgba(74,222,128,.12)">${icon('whatsapp')}</div></div>
+        <div class="grow"><b>Pós-venda de hoje</b><div class="small muted">${f ? `<b class="gold">${f}</b> para pedir feedback` : ''}${f && o ? ' · ' : ''}${o ? `<b class="gold">${o}</b> para oferecer capa/película` : ''}</div></div>${icon('chevRight')}</div>` : ''; })()}
       <div class="grid grid-2 mb">
         <div class="stat"><div class="label">${icon('calendar', 'sm')} Faturamento do mês</div><div class="value gold">${money(mes.receita)}</div><div class="sub">Meta ${money(Store.s.metaMensal)} · ${Store.s.metaMensal ? Math.round(mes.receita / Store.s.metaMensal * 100) : 0}%</div></div>
         <div class="stat"><div class="label">${icon('trending', 'sm')} Lucro do mês</div><div class="value ${mes.lucro >= 0 ? 'green' : 'red'}">${money(mes.lucro)}</div><div class="sub">OS ${money(mes.os)} · Vendas ${money(mes.vendas)}</div></div>

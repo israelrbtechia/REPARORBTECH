@@ -152,6 +152,7 @@ const App = {
       bancada: Store.db.os.filter(o => !o.deleted && OS_ATIVOS.includes(o.status)).length,
       orcamentos: Store.db.orcamentos.filter(o => !o.deleted && o.status === 'pendente').length,
       pecas: Store.db.pecas.filter(p => !p.deleted && p.qtd <= (p.minimo || 0)).length,
+      posvenda: PosVenda.pendentes(),
     };
     for (const [r, n] of Object.entries(counts)) {
       const el = $(`#nav a[data-r="${r}"] .count`);
