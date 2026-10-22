@@ -17,11 +17,12 @@ const VendasPage = {
       <div class="row wrap mb">
         ${cx ? `<span class="pill ${cxAntigo ? 'orange' : 'green'}">● Caixa aberto desde ${fmtDate(cx.abertoEm).slice(0, 5)}</span>${cxAntigo ? `<a class="small" href="#/caixa">Fechar e abrir o de hoje</a>` : ''}` : `<span class="pill red">● Caixa fechado</span><a class="small" href="#/caixa">Abrir caixa</a>`}
       </div>
-      <div class="tabs mb" id="vd-tabs" style="display:inline-flex">${[['produtos', 'Produtos', 'box'], ['hist', 'Histórico de Vendas', 'history']].map(([k, l, ic]) => `<button data-k="${k}" class="${this.st.tab === k ? 'on' : ''}">${icon(ic, 'sm')} ${l}</button>`).join('')}</div>
+      <div class="tabs mb" id="vd-tabs" style="display:inline-flex">${[['produtos', 'Vender', 'cart'], ['cadastro', 'Cadastro', 'plus'], ['hist', 'Histórico', 'history']].map(([k, l, ic]) => `<button data-k="${k}" class="${this.st.tab === k ? 'on' : ''}">${icon(ic, 'sm')} ${l}</button>`).join('')}</div>
       ${!Store.s.exigirCaixa ? `<div class="card mb row small muted" style="align-items:flex-start">${icon('info')}<span>A exigência de caixa aberto está desligada. Recebimentos feitos com o caixa fechado não entram na conferência do caixa.</span></div>` : ''}
       <div id="vd-body"></div>
-      <button class="fab" id="vd-fab" onclick="VendasPage.checkout()" title="Carrinho" style="display:${this.cart.length ? 'grid' : 'none'}">${icon('cart')}<span id="vd-count" style="position:absolute;top:-2px;right:-2px;background:#fff;color:#000;border-radius:99px;font-size:12px;font-weight:800;padding:2px 7px">0</span></button>`;
+      <div class="cart-bar hidden" id="vd-cartbar"></div>`;
     $$('#vd-tabs button').forEach(b => b.onclick = () => { this.st.tab = b.dataset.k; $$('#vd-tabs button').forEach(x => x.classList.toggle('on', x === b)); this.body(); });
+    this.updateCart();
     this.stats = { cels: cels.reduce((s, p) => s + p.qtd, 0), semi: cels.filter(p => p.seminovo).reduce((s, p) => s + p.qtd, 0), acess: acess.length, baixo, venda, custo };
     this.body();
   },
@@ -29,6 +30,7 @@ const VendasPage = {
   body() {
     const box = $('#vd-body');
     if (this.st.tab === 'hist') return this.historico(box);
+    if (this.st.tab === 'cadastro') return this.cadastro(box);
     const { cels, semi, acess, baixo, venda, custo } = this.stats;
     box.innerHTML = `
       <div class="grid grid-2 mb">
@@ -68,21 +70,51 @@ const VendasPage = {
     if (dica) dica.innerHTML = q ? `${list.length} resultado(s) para "<b>${esc(q)}</b>" · celulares e acessórios` : `${icon('info', 'sm')} Mostrando só celulares em estoque. Acessórios aparecem quando você busca.`;
     g.innerHTML = list.map(p => {
       const inCart = this.cart.find(c => c.id === p.id)?.qtd || 0;
-      return `<div class="prod-card" onclick="VendasPage.novaVenda({ produtoId: '${p.id}' })" style="${inCart ? 'border-color:var(--gold)' : ''}">
+      return `<div class="prod-card" onclick="VendasPage.toggle('${p.id}')" style="${inCart ? 'border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)' : ''}">
         <div class="row between"><span class="xs muted ellipsis">${esc(p.categoria || '')}</span><button class="icon-btn" style="width:30px;height:30px" onclick="event.stopPropagation();EstoquePage.editar('produto','${p.id}')">${icon('edit', 'sm')}</button></div>
         <b style="line-height:1.25">${esc(p.nome)}</b>
         ${ehCelular(p) ? `<div class="row wrap" style="gap:4px">${p.seminovo ? '<span class="pill gold xs">Seminovo · 6 meses</span>' : '<span class="pill green xs">Novo</span>'}${p.statusAparelho && p.statusAparelho !== 'disponivel' && STATUS_AP[p.statusAparelho] ? `<span class="pill ${STATUS_AP[p.statusAparelho][1]} xs">${STATUS_AP[p.statusAparelho][0]}</span>` : ''}${p.armazenamento ? `<span class="pill xs">${esc(p.armazenamento)}</span>` : ''}${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei || p.cor ? `<div class="xs muted ellipsis">${[p.cor, p.imei && 'IMEI ' + p.imei].filter(Boolean).map(esc).join(' · ')}</div>` : ''}` : '<span class="pill xs" style="align-self:flex-start">Acessório</span>'}
         <div class="gold bold" style="font-size:18px">${money(p.preco)}</div>
-        <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span>${inCart ? `<span class="pill gold xs">${inCart} no carrinho</span>` : ''}</div>
+        <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span></div>
+        <div class="btn sm ${inCart ? 'primary' : 'outline-gold'}" style="pointer-events:none;margin-top:2px">${inCart ? `${icon('check', 'sm')} No carrinho${ehCelular(p) ? '' : ` (${inCart})`}` : `${icon('cart', 'sm')} Adicionar`}</div>
       </div>`;
     }).join('') || `<div class="empty" style="grid-column:1/-1">${icon(q ? 'search' : 'phone')}<div>${q ? 'Nada encontrado.' : 'Nenhum celular em estoque.<br>Para vender algo sem cadastro, toque em <b class="gold">Nova venda</b>. Acessórios aparecem pela busca.'}</div></div>`;
-    this.updateFab();
+    this.updateCart();
   },
 
-  updateFab() {
+  // Barra do carrinho (fica embaixo da tela enquanto houver itens)
+  updateCart() {
+    const bar = $('#vd-cartbar'); if (!bar) return;
     const n = this.cart.reduce((s, c) => s + c.qtd, 0);
-    const f = $('#vd-fab'); if (!f) return;
-    f.style.display = n ? 'grid' : 'none'; $('#vd-count').textContent = n;
+    const total = this.cart.reduce((s, c) => s + c.preco * c.qtd, 0);
+    bar.classList.toggle('hidden', !n);
+    document.body.classList.toggle('com-carrinho', !!n);
+    if (!n) return;
+    bar.innerHTML = `<div class="grow" style="min-width:0" onclick="VendasPage.verCarrinho()"><div class="bold">${icon('cart', 'sm')} ${n} ${n > 1 ? "itens" : "item"} · <span class="gold">${money(total)}</span></div>
+        <div class="xs muted ellipsis">${this.cart.map(c => esc(c.nome)).join(', ')}</div></div>
+      <button class="btn sm ghost" onclick="VendasPage.limparCarrinho()">Limpar</button>
+      <button class="btn primary" onclick="VendasPage.novaVenda()">Finalizar venda ${icon('arrowRight', 'sm')}</button>`;
+  },
+  // Celular entra ou sai do carrinho; acessório soma 1 a cada toque
+  toggle(id) {
+    const p = Store.produto(id);
+    const it = this.cart.find(c => c.id === id);
+    if (it && ehCelular(p)) { this.cart = this.cart.filter(c => c !== it); toast(`${p.nome} saiu do carrinho`); }
+    else if (it) { it.qtd++; if (it.qtd > p.qtd) toast(`Atenção: estoque de "${p.nome}" é ${p.qtd}`, true); }
+    else {
+      if (p.qtd <= 0) toast(`Atenção: "${p.nome}" está sem estoque`, true);
+      if (p.statusAparelho === 'reservado') toast(`${p.nome} está reservado`, true);
+      this.cart.push(this.itemDe(p)); toast(`${p.nome} no carrinho`);
+    }
+    this.renderProdutos();
+  },
+  limparCarrinho() { this.cart = []; this.renderProdutos(); },
+  verCarrinho() {
+    openModal({
+      title: 'Carrinho', icon: 'cart',
+      body: this.cart.map((c, i) => `<div class="cart-line"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${c.qtd}x ${money(c.preco)}</div></div><b>${money(c.preco * c.qtd)}</b><button class="icon-btn" onclick="VendasPage.cart.splice(${i},1);closeAllModals();VendasPage.renderProdutos();${''}">${icon('trash', 'sm')}</button></div>`).join(''),
+      foot: `<button class="btn" data-close>Continuar escolhendo</button><button class="btn primary" onclick="closeAllModals();VendasPage.novaVenda()">Finalizar venda</button>`,
+    });
   },
 
   add(id) {
@@ -154,7 +186,7 @@ const VendasPage = {
         <div class="form-row">${field('Desconto (R$)', '<input class="input" id="nv-desc" inputmode="decimal" placeholder="0,00">')}${field('Pagamento', `<select class="input" id="nv-forma">${selectOpts(FORMAS_PGTO, 'pix')}</select>`)}</div>
         <div class="card" id="nv-resumo" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)"></div>`,
       foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="nv-ok" style="flex:2">${icon('check')} Confirmar venda</button>`,
-      onClose: () => { this.cart = []; if (App.route === 'vendas') this.renderProdutos(); },
+      onClose: () => { if (App.route === 'vendas') this.renderProdutos(); },
     });
     const el = m.el;
 
@@ -344,6 +376,67 @@ const VendasPage = {
     const d = GarantiaDados.venda(v, v.itens[i]);
     const doc = await Pdf.garantia(d);
     if (compartilhar) await Pdf.compartilhar(doc, Pdf.nome(d), `Garantia do aparelho — ${Store.s.loja}`); else Pdf.baixar(doc, Pdf.nome(d));
+  },
+
+  /* ---------- Aba Cadastro: cadastrar produtos sem vender ---------- */
+  cadastro(box) {
+    const f = this.st.cad || (this.st.cad = { tipo: 'seminovo', q: '', ver: 'celulares' });
+    const tipos = [['seminovo', 'Celular seminovo', 'phone', 'Garantia 6 meses'], ['novo', 'Celular novo', 'phone', 'Lacrado / novo'], ['acessorio', 'Acessório', 'tag', 'Capa, cabo, película...']];
+    const cel = f.tipo !== 'acessorio';
+    box.innerHTML = `
+      <form class="card mb" id="cd-form" autocomplete="off">
+        <h3>${icon('plus', 'sm')} Cadastrar <span class="gold">produto</span></h3>
+        <div class="grid grid-3 mb" id="cd-tipos">${tipos.map(([k, l, ic, d]) => `<button type="button" class="chip-opt ${f.tipo === k ? 'on' : ''}" data-tp="${k}">${icon(ic)}<span>${l}</span><span class="xs muted" style="font-weight:500">${d}</span></button>`).join('')}</div>
+        ${field(cel ? 'Modelo' : 'Nome do produto', `<input class="input" name="nome" placeholder="${cel ? 'Ex: iPhone 13 128GB' : 'Ex: Película 3D iPhone 13'}" required>`, { req: true })}
+        <div class="form-row">${field('Preço de venda', '<input class="input" name="preco" inputmode="decimal" placeholder="0,00">', { req: true })}${field('Custo', '<input class="input" name="custo" inputmode="decimal" placeholder="0,00">', { opt: true })}</div>
+        ${cel ? `
+          <div class="form-row">${field('IMEI', '<input class="input" name="imei" style="font-family:ui-monospace,monospace">', { opt: true })}${field('Cor', '<input class="input" name="cor">', { opt: true })}</div>
+          <div class="form-row">${field('Armazenamento', '<input class="input" name="armazenamento" placeholder="128 GB">', { opt: true })}${field('Saúde da bateria', '<input class="input" name="bateria" placeholder="88%">', { opt: true })}</div>
+          <div class="form-row">${field('Condição', `<select class="input" name="condicao"><option value="">—</option>${selectOpts(CONDICOES, f.tipo === 'novo' ? '' : 'Muito bom')}</select>`, { opt: true })}${f.tipo === 'novo' ? field('Garantia (dias)', '<input class="input" name="garantiaDias" type="number" value="365">') : field('Garantia', '<div class="input" style="display:flex;align-items:center;color:var(--gold);font-weight:700">6 meses</div>')}</div>`
+        : `<div class="form-row">${field('Quantidade', '<input class="input" name="qtd" type="number" min="0" value="1">')}${field('Estoque mínimo', '<input class="input" name="minimo" type="number" min="0" value="1">')}</div>
+          <div class="form-row">${field('Categoria', `<input class="input" name="categoria" list="cd-cats" placeholder="Capinha, Película, Cabo..."><datalist id="cd-cats">${[...new Set(Store.db.produtos.filter(p => !ehCelular(p)).map(p => p.categoria).filter(Boolean))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>`, { opt: true })}${field('Garantia (dias)', '<input class="input" name="garantiaDias" type="number" value="90">')}</div>
+          ${field('Código / SKU', '<input class="input" name="codigo">', { opt: true })}`}
+        <button class="btn primary block" style="min-height:52px">${icon('check')} Salvar no estoque</button>
+        <p class="xs muted center" style="margin-bottom:0">Depois de salvar, o formulário limpa para cadastrar o próximo.</p>
+      </form>
+      <div class="card pad-0">
+        <div class="list-head"><div class="tabs" id="cd-ver">${[['celulares', 'Celulares'], ['acessorios', 'Acessórios']].map(([k, l]) => `<button data-v="${k}" class="${f.ver === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+          <div class="input-icon" style="flex:1;min-width:180px">${icon('search')}<input class="input" id="cd-q" placeholder="Buscar..." value="${esc(f.q)}" style="min-height:40px"></div></div>
+        <div id="cd-list"></div>
+      </div>`;
+    const lista = () => {
+      const l = Store.db.produtos.filter(p => !p.deleted && (f.ver === 'celulares' ? ehCelular(p) : !ehCelular(p)) && matches(f.q, p.nome, p.imei, p.codigo, p.categoria, p.cor))
+        .sort((a, b) => (b.qtd > 0) - (a.qtd > 0) || String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')));
+      $('#cd-list').innerHTML = l.slice(0, 200).map(p => ehCelular(p)
+        ? `<div class="item" style="padding:12px 16px" onclick="EstoquePage.editar('produto','${p.id}')"><div class="row"><div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(p.nome)}</b>
+            <div class="xs muted ellipsis">${[p.seminovo ? 'Seminovo' : 'Novo', p.armazenamento, p.cor, p.imei && 'IMEI ' + p.imei].filter(Boolean).map(esc).join(' · ')}</div></div>
+            <div class="right"><b class="gold">${money(p.preco)}</b><div class="xs ${p.qtd > 0 ? 'green' : 'muted'}">${p.qtd > 0 ? 'Em estoque' : 'Vendido'}</div></div></div></div>`
+        : EstoquePage.itemHTML(p, 'produto')).join('') || `<div class="empty small">Nenhum ${f.ver === 'celulares' ? 'celular' : 'acessório'} cadastrado.</div>`;
+    };
+    $$('#cd-tipos [data-tp]').forEach(b => b.onclick = () => { f.tipo = b.dataset.tp; this.cadastro(box); $('#cd-form [name=nome]').focus(); });
+    $$('#cd-ver [data-v]').forEach(b => b.onclick = () => { f.ver = b.dataset.v; $$('#cd-ver [data-v]').forEach(x => x.classList.toggle('on', x === b)); lista(); });
+    $('#cd-q').oninput = e => { f.q = e.target.value; lista(); };
+    $('#cd-form').onsubmit = e => {
+      e.preventDefault();
+      const d = readForm(e.target);
+      if (!d.nome) return toast('Informe o nome', true);
+      if (!parseMoney(d.preco)) return toast('Informe o preço de venda', true);
+      const imei = onlyDigits(d.imei || '');
+      if (cel && imei && Store.db.produtos.some(p => !p.deleted && onlyDigits(p.imei) === imei && p.qtd > 0)) return toast('Já existe um aparelho em estoque com este IMEI', true);
+      const p = { id: uid(), nome: d.nome, preco: parseMoney(d.preco), custo: parseMoney(d.custo), qtd: 0, tipoProduto: f.tipo, seminovo: f.tipo === 'seminovo',
+        minimo: cel ? 0 : parseInt(d.minimo) || 0, categoria: cel ? (f.tipo === 'seminovo' ? 'Celulares seminovos' : 'Celulares novos') : d.categoria, codigo: d.codigo || '',
+        imei: d.imei || '', cor: d.cor || '', armazenamento: d.armazenamento || '', bateria: d.bateria || '', condicao: d.condicao || '',
+        garantiaDias: f.tipo === 'seminovo' ? GARANTIA_SEMINOVO_DIAS : parseInt(d.garantiaDias) || 0, statusAparelho: 'disponivel', criadoEm: nowISO(), entradaEm: nowISO() };
+      Store.db.produtos.push(p);
+      const qtd = cel ? 1 : Math.max(0, parseInt(d.qtd) || 0);
+      if (qtd) Store.movimentar('produto', p, qtd, 'Cadastro');
+      Store.log('Produto cadastrado', p.nome); Store.save();
+      toast(`${p.nome} cadastrado`);
+      f.ver = cel ? 'celulares' : 'acessorios';
+      this.render($('#main')); // atualiza resumo e limpa o formulário
+      $('#cd-form [name=nome]').focus();
+    };
+    lista();
   },
 
   historico(box) {

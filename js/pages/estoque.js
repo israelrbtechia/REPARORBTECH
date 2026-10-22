@@ -64,7 +64,7 @@ const EstoquePage = {
     const p = this.col(tipo).find(x => x.id === id);
     Store.movimentar(tipo, p, d, d > 0 ? 'Ajuste manual (+)' : 'Ajuste manual (−)');
     Store.save();
-    if (tipo === 'peca') this.list(); else VendasPage.renderProdutos();
+    if (tipo === 'peca') this.list(); else App.refresh();
     App.updateNav();
   },
 

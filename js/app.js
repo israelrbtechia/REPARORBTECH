@@ -104,6 +104,7 @@ const App = {
     this.closeMenu();
     const main = $('#main');
     main.innerHTML = '';
+    document.body.classList.remove('com-carrinho');
     Pages[this.route].render(main, this.params);
     scrollTo(0, 0);
     this.avisarPedidos();

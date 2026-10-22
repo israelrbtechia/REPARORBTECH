@@ -317,3 +317,10 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .timeline { border-left: 2px solid var(--line-2); margin-left: 6px; padding-left: 16px; }
 .timeline .ev { position: relative; padding-bottom: 12px; font-size: 13.5px; }
 .timeline .ev::before { content: ""; position: absolute; left: -22px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
+
+/* barra do carrinho (Venda de Produtos) */
+.cart-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px calc(12px + var(--safe-b)); background: rgba(10,10,10,.96); backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(212,175,55,.55); box-shadow: 0 -10px 30px rgba(0,0,0,.6); cursor: pointer; }
+body.com-carrinho .main { padding-bottom: calc(110px + var(--safe-b)); }
+@media (min-width: 1024px) { .cart-bar { left: var(--sidebar); } }
