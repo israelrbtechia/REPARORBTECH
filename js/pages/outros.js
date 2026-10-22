@@ -313,8 +313,9 @@ Pages.config = {
 
       <div class="card mb">
         <h3>${icon('upload', 'sm')} Importar do <span class="gold">sistema antigo</span></h3>
-        <p class="small muted" style="margin-top:0">Envie o <b>Dossiê de auditoria (CSV)</b> exportado do sistema anterior. Importa clientes, OS em aberto, vendas, estoque e serviços — sem duplicar o que já existe.</p>
-        <label class="btn outline-gold block">${icon('upload')} Escolher arquivo do dossiê (.csv)<input type="file" accept=".csv,text/csv" id="cf-dossie" hidden></label>
+        <p class="small muted" style="margin-top:0">Arquivos exportados do Reparo Pro. Nada é duplicado: pode importar de novo quando quiser.</p>
+        <label class="btn primary block mb">${icon('users')} Lista de clientes (PDF) — com telefones<input type="file" accept=".pdf,application/pdf" id="cf-clipdf" hidden></label>
+        <label class="btn outline-gold block">${icon('upload')} Dossiê de auditoria (CSV) — OS, vendas, estoque<input type="file" accept=".csv,text/csv" id="cf-dossie" hidden></label>
       </div>
 
       <div class="card mb">
@@ -392,6 +393,7 @@ Pages.config = {
     $('#cf-oadd').onclick = () => { const n = $('#cf-onome').value.trim(); if (!n) return; s.origens.push(n); Store.save(); App.refresh(); };
     $('#cf-restore').onchange = e => this.restaurar(e.target.files[0]);
     $('#cf-dossie').onchange = e => { this.importarDossie(e.target.files[0]); e.target.value = ''; };
+    $('#cf-clipdf').onchange = e => { this.importarClientesPdf(e.target.files[0]); e.target.value = ''; };
     if ($('#cf-membros')) this.renderMembros();
     const ff = $('#cf-func');
     if (ff) ff.onsubmit = async e => {
@@ -413,6 +415,28 @@ Pages.config = {
         });
       } catch (err) { toast(err.message, true); } finally { btn.disabled = false; }
     };
+  },
+
+  async importarClientesPdf(file) {
+    if (!file) return;
+    toast('Lendo o PDF...');
+    let lista;
+    try { lista = await ClientesPDF.ler(file); } catch (e) { return toast('Não foi possível ler o PDF: ' + e.message, true); }
+    if (!lista.length) return toast('Nenhum cliente encontrado neste PDF', true);
+    const comTel = lista.filter(c => c.telefone).length;
+    openModal({
+      title: 'Importar clientes', icon: 'users', subtitle: file.name,
+      body: `<div class="grid grid-2 mb"><div class="stat"><div class="label">Clientes</div><div class="value gold">${lista.length}</div></div><div class="stat"><div class="label">Com telefone</div><div class="value green">${comTel}</div></div></div>
+        <p class="small muted" style="margin-top:0">Quem já está no app (mesmo nome) recebe o telefone e o e-mail; quem falta é cadastrado. Também guarda o total gasto e a última visita do sistema antigo.</p>
+        <div class="card pad-0">${lista.slice(0, 6).map(c => `<div class="cart-line" style="padding:8px 14px"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${esc(fmtPhone(c.telefone) || 'sem telefone')}${c.totalGasto ? ' · ' + money(c.totalGasto) : ''}</div></div></div>`).join('')}
+        <div class="xs muted center" style="padding:8px">e mais ${Math.max(0, lista.length - 6)}...</div></div>`,
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="ic-ok">${icon('check')} Importar ${lista.length} clientes</button>`,
+      onMount: (el, m) => $('#ic-ok', el).onclick = () => {
+        const r = ClientesPDF.importar(lista);
+        m.close(); App.refresh();
+        openModal({ title: 'Clientes importados!', icon: 'checkCircle', body: `<p style="margin-top:0"><b class="gold">${r.atualizados}</b> clientes que já existiam receberam telefone/e-mail e <b class="gold">${r.novos}</b> novos foram cadastrados.</p>${Cloud.loja ? '<p class="small muted">Os dados estão sendo enviados para a nuvem e aparecem nos outros aparelhos em instantes.</p>' : ''}`, foot: '<button class="btn primary" data-close>OK</button>' });
+      },
+    });
   },
 
   importarDossie(file) {

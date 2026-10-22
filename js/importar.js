@@ -146,3 +146,82 @@ const Dossie = {
     return n;
   },
 };
+
+/* Lista de clientes em PDF exportada do Reparo Pro (Base de clientes):
+   colunas Nome · Telefone · Email · Aparelhos · Total gasto · Últ. visita.
+   Lê o texto do PDF no próprio navegador (pdf.js) e completa/cadastra os clientes. */
+const ClientesPDF = {
+  async carregarPdfJs() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    await new Promise((ok, erro) => { const s = document.createElement('script'); s.src = 'js/vendor/pdf.min.js'; s.onload = ok; s.onerror = () => erro(new Error('Não foi possível carregar o leitor de PDF')); document.head.appendChild(s); });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'js/vendor/pdf.worker.min.js';
+    return window.pdfjsLib;
+  },
+
+  async ler(file) {
+    const pdfjs = await this.carregarPdfJs();
+    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    const linhas = [];
+    let telX = null;
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const items = (await page.getTextContent()).items.filter(i => i.str && i.str.trim()).map(i => ({ s: i.str.trim(), x: i.transform[4], y: i.transform[5] }));
+      const head = items.find(i => /^Telefone$/i.test(i.s));
+      if (head) telX = head.x;
+      const headY = head ? head.y : Infinity;
+      // agrupa por linha (mesmo y), de cima para baixo
+      const rows = [];
+      for (const it of items.filter(i => i.y < headY - 1).sort((a, b) => b.y - a.y || a.x - b.x)) {
+        const r = rows.find(r => Math.abs(r.y - it.y) < 3);
+        if (r) r.items.push(it); else rows.push({ y: it.y, items: [it] });
+      }
+      rows.forEach(r => { r.items.sort((a, b) => a.x - b.x); linhas.push(r.items); });
+    }
+    if (telX == null) throw new Error('Este PDF não parece ser a lista de clientes do Reparo Pro');
+    const out = []; let cur = null;
+    for (const its of linhas) {
+      const txt = its.map(i => i.s).join(' ');
+      if (/gerado via|reparopro|^nome\b/i.test(txt)) continue;
+      const data = txt.match(/(\d{2})\/(\d{2})\/(\d{4})\s*$/);
+      if (data) {
+        let nome = its.filter(i => i.x < telX - 2).map(i => i.s).join(' ');
+        let resto = its.filter(i => i.x >= telX - 2).map(i => i.s).join(' ');
+        const colado = nome.match(/^(.*?)\s+(\+?\(?\d[\d ()\-]{7,}\d)$/); // telefone grudado no nome
+        if (colado) { nome = colado[1]; resto = colado[2] + ' ' + resto; }
+        const m = resto.match(/^(?:(\+?\(?\d[\d ()\-]{7,}\d)\s+)?(\S+)\s+(\d+)\s+R\$\s*([\d.,]+)/);
+        let tel = onlyDigits(m?.[1] || '');
+        if (tel.length === 13 && tel.startsWith('4848')) tel = tel.slice(2); // DDD digitado duas vezes
+        if ((tel.length === 12 || tel.length === 13) && tel.startsWith('55')) tel = tel.slice(2);
+        cur = { nome: nome.trim(), telefone: tel, email: m && m[2] !== '-' && m[2].includes('@') ? m[2].toLowerCase() : '', aparelhos: +(m?.[3] || 0), totalGasto: parseMoney(m?.[4] || 0), ultimaVisita: `${data[3]}-${data[2]}-${data[1]}` };
+        out.push(cur);
+      } else if (cur && !/\d/.test(txt) && its.every(i => i.x < telX - 2)) {
+        cur.nome += ' ' + txt; // nome longo que quebrou em mais linhas
+      }
+    }
+    const vistos = new Set();
+    return out.map(c => ({ ...c, nome: c.nome.replace(/\s+/g, ' ').trim() }))
+      .filter(c => c.nome && !vistos.has(norm(c.nome) + '|' + c.telefone) && vistos.add(norm(c.nome) + '|' + c.telefone));
+  },
+
+  // Completa quem já existe (mesmo nome, sem telefone ou mesmo telefone) e cadastra o resto
+  importar(lista) {
+    const usados = new Set(); let atualizados = 0, novos = 0;
+    for (const r of lista) {
+      const cands = Store.db.clientes.filter(c => !c.deleted && !usados.has(c.id) && norm(c.nome).trim() === norm(r.nome) && (!onlyDigits(c.telefone) || onlyDigits(c.telefone) === r.telefone));
+      let c = cands.find(c => onlyDigits(c.telefone) === r.telefone && r.telefone) || cands[0];
+      const antigo = { totalGasto: r.totalGasto, ultimaVisita: r.ultimaVisita, aparelhos: r.aparelhos };
+      if (c) {
+        if (!onlyDigits(c.telefone) && r.telefone) c.telefone = r.telefone;
+        if (!c.email && r.email) c.email = r.email;
+        c.sistemaAntigo = antigo; atualizados++;
+      } else {
+        c = { id: uid(), nome: r.nome, telefone: r.telefone, email: r.email, docTipo: 'CPF', aparelhos: [], criadoEm: new Date(r.ultimaVisita + 'T12:00:00').toISOString(), importado: true, sistemaAntigo: antigo };
+        Store.db.clientes.push(c); novos++;
+      }
+      usados.add(c.id);
+    }
+    Store.log('Importação de clientes (PDF)', `${atualizados} atualizados, ${novos} novos`);
+    Store.save();
+    return { atualizados, novos };
+  },
+};

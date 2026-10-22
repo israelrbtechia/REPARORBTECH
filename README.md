@@ -25,7 +25,7 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 Link público `/pedido/<id da loja>` (copie em **Configurações** ou em **OS → Pedidos**): o cliente informa nome, WhatsApp, marca, modelo, defeito e urgência. O pedido chega na hora com **pop-up e som**, aparece na aba **OS → Pedidos** (não lidos em destaque) e no Dashboard. Ao abrir: **Aceitar e criar orçamento** (já preenchido) → enviar o orçamento pelo WhatsApp. Requer a nuvem e o `schema.sql` atualizado.
 
 ## Importar do sistema antigo
-**Configurações → Importar do sistema antigo** lê o *Dossiê de auditoria (CSV)* e importa clientes (só nomes), OS em aberto, vendas do período (opcionalmente no financeiro), estoque e serviços. Não duplica se importado de novo. O dossiê não traz telefones/CPF nem o histórico completo de OS e recebimentos de serviços.
+**Configurações → Importar do sistema antigo → Lista de clientes (PDF)** lê o PDF da base de clientes do Reparo Pro (nome, telefone, e-mail, total gasto, última visita) e completa/cadastra os clientes. O botão **Dossiê de auditoria (CSV)** lê o *Dossiê de auditoria (CSV)* e importa clientes (só nomes), OS em aberto, vendas do período (opcionalmente no financeiro), estoque e serviços. Não duplica se importado de novo. O dossiê não traz telefones/CPF nem o histórico completo de OS e recebimentos de serviços.
 
 ## Como usar
 Site estático, sem build. Publicação na **Vercel**:
