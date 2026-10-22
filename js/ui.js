@@ -6,6 +6,7 @@ function toast(msg, err = false) {
   el.className = 'toast' + (err ? ' err' : '');
   el.innerHTML = icon(err ? 'alert' : 'checkCircle') + `<span>${esc(msg)}</span>`;
   root.appendChild(el);
+  while (root.children.length > 2) root.firstChild.remove(); // no máximo 2 avisos na tela
   setTimeout(() => el.remove(), 3200);
 }
 

@@ -2,8 +2,24 @@
 
 /* Pós-Venda: feedback após 7 dias e oferta de capa/película após 30 dias,
    para reparos entregues (OS pagas) e vendas de aparelhos */
-const MSG_FEEDBACK_PADRAO = 'Olá {nome}! Aqui é da {loja} 😊\n\nJá faz {dias} dias desde {motivo} *{aparelho}*. Como ele está se saindo? Ficou tudo certinho?\n\nSua opinião é muito importante pra gente! 💛{avaliacao}';
-const MSG_OFERTA_PADRAO = 'Olá {nome}! Aqui é da {loja} 📱\n\nPara manter seu *{aparelho}* sempre protegido, separamos uma condição especial pra você: *capa + película com {desconto} de desconto* 🛡️\n\nQuer que eu separe? É só responder aqui!';
+// Modelos de mensagem do pós-venda (cada um pode ser personalizado em Pós-Venda)
+const MSG_MODELOS = {
+  feedbackReparo: {
+    campo: 'msgFeedbackReparo', titulo: 'Feedback de reparo (7 dias)', icone: 'wrench',
+    exemplo: { tipo: 'os', cliente: { nome: 'Maria Souza' }, aparelho: 'Samsung A51', dias: 7, motivo: 'o reparo do seu' },
+    padrao: 'Olá {nome}! Aqui é da {loja} 😊\n\nJá faz {dias} dias que consertamos seu *{aparelho}*. Está tudo funcionando direitinho depois do reparo?\n\nLembrando que o serviço tem *garantia de 3 meses*: qualquer coisa, é só chamar! 💛{avaliacao}',
+  },
+  feedbackCompra: {
+    campo: 'msgFeedbackCompra', titulo: 'Feedback de compra de celular (7 dias)', icone: 'phone',
+    exemplo: { tipo: 'venda', cliente: { nome: 'Maria Souza' }, aparelho: 'iPhone 13', dias: 7, motivo: 'a compra do seu' },
+    padrao: 'Olá {nome}! Aqui é da {loja} 😊\n\nJá faz {dias} dias que você está com seu *{aparelho}*. Está gostando? Bateria, câmera e tudo mais funcionando certinho?\n\nSeu aparelho tem *garantia de 6 meses* com a gente. Qualquer dúvida, é só chamar! 💛{avaliacao}',
+  },
+  oferta: {
+    campo: 'msgOferta', titulo: 'Oferta de capa e película (30 dias)', icone: 'tag',
+    exemplo: { tipo: 'venda', cliente: { nome: 'Maria Souza' }, aparelho: 'iPhone 13', dias: 30, motivo: 'a compra do seu' },
+    padrao: 'Olá {nome}! Aqui é da {loja} 📱\n\nPara manter seu *{aparelho}* sempre protegido, separamos uma condição especial pra você: *capa + película com {desconto} de desconto* 🛡️\n\nQuer que eu separe? É só responder aqui!',
+  },
+};
 
 const PosVenda = {
   // Reparos entregues e vendas de aparelhos, com a data de referência
@@ -30,10 +46,12 @@ const PosVenda = {
   oferta() { return this.compras().filter(x => x.dias >= 30 && x.dias <= 120 && !this.estado(x.ref).oferta); },
   pendentes() { return this.feedback().length + this.oferta().length; },
 
+  // Reparo e compra de celular têm mensagens de feedback diferentes
+  modelo(tipo, x) { return tipo === 'oferta' ? 'oferta' : x.tipo === 'os' ? 'feedbackReparo' : 'feedbackCompra'; },
   mensagem(tipo, x) {
-    const s = Store.s;
+    const s = Store.s, md = MSG_MODELOS[this.modelo(tipo, x)];
     const nome = String(x.cliente?.nome || x.nomeAvulso || '').split(' ')[0];
-    const tpl = (tipo === 'feedback' ? s.msgFeedback : s.msgOferta) || (tipo === 'feedback' ? MSG_FEEDBACK_PADRAO : MSG_OFERTA_PADRAO);
+    const tpl = s[md.campo] || md.padrao;
     return tpl.replace(/\{nome\}/g, nome).replace(/\{loja\}/g, s.loja).replace(/\{aparelho\}/g, x.aparelho).replace(/\{dias\}/g, x.dias)
       .replace(/\{motivo\}/g, x.motivo).replace(/\{desconto\}/g, s.descontoOferta || '10%')
       .replace(/\{avaliacao\}/g, s.googleReview ? `\n\nSe puder, deixe sua avaliação no Google, ajuda muito: ${s.googleReview}` : '')
@@ -87,8 +105,8 @@ Pages.posvenda = {
         <div class="row" style="align-items:flex-start"><div class="stat-icon"><div class="ic">${icon(fb ? 'star' : 'tag')}</div></div>
           <div class="grow"><b>${fb ? 'Como está indo o aparelho?' : 'Oferta de capa e película'}</b>
           <div class="small muted">${fb ? 'Clientes com <b>7 dias ou mais</b> desde o reparo entregue ou a compra do aparelho.' : 'Clientes com <b>30 dias ou mais</b> desde o reparo ou a compra: ofereça proteção para o aparelho.'} Toque em <b class="green">Enviar</b>: o WhatsApp abre com a mensagem pronta e o cliente sai da lista.</div></div></div>
-        <div class="row wrap mt"><button class="btn sm outline-gold" onclick="Pages.posvenda.editarMsg('${tipo}')">${icon('edit', 'sm')} Personalizar mensagem</button>
-          ${lista[0] ? `<button class="btn sm" onclick="Pages.posvenda.previa('${tipo}')">${icon('eye', 'sm')} Ver exemplo</button>` : ''}</div>
+        <div class="row wrap mt">${(fb ? [['feedbackReparo', 'Mensagem p/ reparo'], ['feedbackCompra', 'Mensagem p/ compra de celular']] : [['oferta', 'Personalizar mensagem']])
+          .map(([k, l]) => `<button class="btn sm outline-gold" onclick="Pages.posvenda.editarMsg('${k}')">${icon(MSG_MODELOS[k].icone, 'sm')} ${l}</button>`).join('')}</div>
       </div>
       <div class="card pad-0 mb"><div class="list-head"><b>${lista.length} cliente(s) para ${fb ? 'pedir feedback' : 'oferecer capa/película'}</b></div>
       ${lista.map(x => {
@@ -97,6 +115,7 @@ Pages.posvenda = {
           <div class="avatar">${esc(n[0].toUpperCase())}</div>
           <div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(n)}</b>
             <div class="small gold ellipsis">${esc(x.aparelho)}</div>
+            <span class="pill xs ${x.tipo === 'os' ? 'purple' : 'gold'}" style="margin:3px 0">${x.tipo === 'os' ? 'Reparo' : 'Compra de celular'}</span>
             <div class="xs muted">${x.titulo} · há ${x.dias} dias (${fmtDate(x.data)})</div></div>
           <div class="col" style="gap:6px;align-items:flex-end">
             ${c?.telefone ? `<button class="btn sm success" onclick="Pages.posvenda.enviar('${tipo}','${x.key}')">${icon('whatsapp', 'sm')} Enviar</button>`
@@ -135,26 +154,26 @@ Pages.posvenda = {
       onMount: (el, m) => { $('#pt-tel', el).focus(); $('#pt-ok', el).onclick = () => { const d = onlyDigits($('#pt-tel', el).value); if (d.length < 10) return toast('Telefone inválido', true); c.telefone = d; Store.saveCliente(c); m.close(); App.refresh(); toast('Telefone salvo'); }; },
     });
   },
-  previa(tipo) {
-    const x = (tipo === 'feedback' ? PosVenda.feedback() : PosVenda.oferta())[0];
-    openModal({ title: 'Exemplo da mensagem', icon: 'whatsapp', subtitle: x.cliente?.nome || x.nomeAvulso, body: `<div class="card" style="white-space:pre-wrap;background:#0b1a12;border-color:#1f3d2b">${esc(PosVenda.mensagem(tipo, x))}</div>` });
-  },
-  editarMsg(tipo) {
-    const s = Store.s, fb = tipo === 'feedback';
-    const campo = fb ? 'msgFeedback' : 'msgOferta', padrao = fb ? MSG_FEEDBACK_PADRAO : MSG_OFERTA_PADRAO;
-    const exemplo = { cliente: { nome: 'Maria Souza' }, aparelho: 'iPhone 13', dias: fb ? 7 : 30, motivo: 'a compra do seu' };
+  editarMsg(chave) {
+    const s = Store.s, md = MSG_MODELOS[chave], oferta = chave === 'oferta';
+    const tipo = oferta ? 'oferta' : 'feedback';
     openModal({
-      title: fb ? 'Mensagem de feedback (7 dias)' : 'Mensagem de oferta (30 dias)', icon: 'edit',
-      body: `<p class="small muted" style="margin-top:0">Use as variáveis: <b class="gold">{nome}</b> primeiro nome · <b class="gold">{aparelho}</b> · <b class="gold">{dias}</b> · <b class="gold">{motivo}</b> ("o reparo do seu" / "a compra do seu") · <b class="gold">{loja}</b>${fb ? ' · <b class="gold">{avaliacao}</b> link do Google' : ' · <b class="gold">{desconto}</b>'}. Use *texto* para negrito no WhatsApp.</p>
-        ${field('Mensagem', `<textarea class="input" id="pm-txt" style="min-height:170px">${esc(s[campo] || padrao)}</textarea>`)}
-        ${fb ? '' : field('Desconto oferecido', `<input class="input" id="pm-desc" value="${esc(s.descontoOferta || '10%')}" placeholder="Ex: 10%, R$ 15">`)}
+      title: md.titulo, icon: 'edit',
+      body: `<p class="small muted" style="margin-top:0">Variáveis: <b class="gold">{nome}</b> primeiro nome · <b class="gold">{aparelho}</b> · <b class="gold">{dias}</b> · <b class="gold">{loja}</b>${oferta ? ' · <b class="gold">{desconto}</b>' : ' · <b class="gold">{avaliacao}</b> link do Google'}. Use *texto* para negrito no WhatsApp.</p>
+        ${field('Mensagem', `<textarea class="input" id="pm-txt" style="min-height:190px">${esc(s[md.campo] || md.padrao)}</textarea>`)}
+        ${oferta ? field('Desconto oferecido', `<input class="input" id="pm-desc" value="${esc(s.descontoOferta || '10%')}" placeholder="Ex: 10%, R$ 15">`) : ''}
         <div class="lbl mb">Prévia</div><div class="card" id="pm-prev" style="white-space:pre-wrap;background:#0b1a12;border-color:#1f3d2b"></div>`,
       foot: `<button class="btn" id="pm-reset">Restaurar padrão</button><button class="btn primary" id="pm-ok">${icon('check')} Salvar</button>`,
       onMount: (el, m) => {
-        const prev = () => { const old = s[campo], oldD = s.descontoOferta; s[campo] = $('#pm-txt', el).value; if ($('#pm-desc', el)) s.descontoOferta = $('#pm-desc', el).value; $('#pm-prev', el).textContent = PosVenda.mensagem(tipo, exemplo); s[campo] = old; s.descontoOferta = oldD; };
+        const prev = () => {
+          const old = s[md.campo], oldD = s.descontoOferta;
+          s[md.campo] = $('#pm-txt', el).value; if ($('#pm-desc', el)) s.descontoOferta = $('#pm-desc', el).value;
+          $('#pm-prev', el).textContent = PosVenda.mensagem(tipo, md.exemplo);
+          s[md.campo] = old; s.descontoOferta = oldD;
+        };
         $('#pm-txt', el).oninput = prev; if ($('#pm-desc', el)) $('#pm-desc', el).oninput = prev; prev();
-        $('#pm-reset', el).onclick = () => { $('#pm-txt', el).value = padrao; prev(); };
-        $('#pm-ok', el).onclick = () => { s[campo] = $('#pm-txt', el).value.trim(); if ($('#pm-desc', el)) s.descontoOferta = $('#pm-desc', el).value.trim(); Store.save(); m.close(); App.refresh(); toast('Mensagem salva'); };
+        $('#pm-reset', el).onclick = () => { $('#pm-txt', el).value = md.padrao; prev(); };
+        $('#pm-ok', el).onclick = () => { s[md.campo] = $('#pm-txt', el).value.trim(); if ($('#pm-desc', el)) s.descontoOferta = $('#pm-desc', el).value.trim(); Store.save(); m.close(); App.refresh(); toast('Mensagem salva'); };
       },
     });
   },
