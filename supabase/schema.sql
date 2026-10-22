@@ -77,12 +77,16 @@ create policy membros_remover on public.membros for delete
 
 drop policy if exists itens_ver on public.itens;
 create policy itens_ver on public.itens for select using (loja_id in (select public.minhas_lojas()));
+-- As configurações da loja (meta/settings) só o dono altera; o resto a equipe toda altera
 drop policy if exists itens_inserir on public.itens;
-create policy itens_inserir on public.itens for insert with check (loja_id in (select public.minhas_lojas()));
+create policy itens_inserir on public.itens for insert with check (loja_id in (select public.minhas_lojas())
+  and (not (colecao = 'meta' and id = 'settings') or public.sou_dono(loja_id)));
 drop policy if exists itens_editar on public.itens;
-create policy itens_editar on public.itens for update using (loja_id in (select public.minhas_lojas())) with check (loja_id in (select public.minhas_lojas()));
+create policy itens_editar on public.itens for update using (loja_id in (select public.minhas_lojas()))
+  with check (loja_id in (select public.minhas_lojas()) and (not (colecao = 'meta' and id = 'settings') or public.sou_dono(loja_id)));
 drop policy if exists itens_apagar on public.itens;
-create policy itens_apagar on public.itens for delete using (loja_id in (select public.minhas_lojas()));
+create policy itens_apagar on public.itens for delete using (loja_id in (select public.minhas_lojas())
+  and (not (colecao = 'meta' and id = 'settings') or public.sou_dono(loja_id)));
 
 -- ---------- Ações (RPC) ----------
 -- Cria uma loja e torna o usuário atual o dono

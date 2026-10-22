@@ -149,7 +149,7 @@ Pages.caixa = {
         ${(cx.movs || []).length ? `<div class="card mb"><h3>Movimentações</h3>${cx.movs.map(m => `<div class="kv"><span class="k">${fmtDateTime(m.data)} · ${m.tipo === 'sangria' ? 'Sangria' : 'Suprimento'} ${m.desc ? '— ' + esc(m.desc) : ''}</span><span class="v ${m.tipo === 'sangria' ? 'red' : 'green'}">${money(m.valor)}</span></div>`).join('')}</div>` : ''}
         <button class="btn primary block mb" id="cx-fechar">${icon('lock')} Fechar caixa</button>`;
     }
-    html += `<div class="card mb"><label class="check" style="padding:0"><input type="checkbox" id="cx-exig" ${Store.s.exigirCaixa ? 'checked' : ''}> <span><b>Exigir caixa aberto</b> para receber pagamentos e vender</span></label></div>
+    html += `<div class="card mb"><label class="check" style="padding:0"><input type="checkbox" id="cx-exig" ${Store.s.exigirCaixa ? 'checked' : ''} ${Cloud.ehDono() ? '' : 'disabled'}> <span><b>Exigir caixa aberto</b> para receber pagamentos e vender</span></label></div>
       <div class="card pad-0"><div class="list-head"><b>Caixas anteriores</b></div>${hist.map(c => {
         const d = (c.valorContado ?? c.esperado) - c.esperado;
         return `<div class="item" style="cursor:default"><div class="row between"><div><b>${fmtDate(c.abertoEm)}</b><div class="xs muted">${fmtDateTime(c.abertoEm)} → ${fmtDateTime(c.fechadoEm)}</div></div>

@@ -105,8 +105,8 @@ Pages.posvenda = {
         <div class="row" style="align-items:flex-start"><div class="stat-icon"><div class="ic">${icon(fb ? 'star' : 'tag')}</div></div>
           <div class="grow"><b>${fb ? 'Como está indo o aparelho?' : 'Oferta de capa e película'}</b>
           <div class="small muted">${fb ? 'Clientes com <b>7 dias ou mais</b> desde o reparo entregue ou a compra do aparelho.' : 'Clientes com <b>30 dias ou mais</b> desde o reparo ou a compra: ofereça proteção para o aparelho.'} Toque em <b class="green">Enviar</b>: o WhatsApp abre com a mensagem pronta e o cliente sai da lista.</div></div></div>
-        <div class="row wrap mt">${(fb ? [['feedbackReparo', 'Mensagem p/ reparo'], ['feedbackCompra', 'Mensagem p/ compra de celular']] : [['oferta', 'Personalizar mensagem']])
-          .map(([k, l]) => `<button class="btn sm outline-gold" onclick="Pages.posvenda.editarMsg('${k}')">${icon(MSG_MODELOS[k].icone, 'sm')} ${l}</button>`).join('')}</div>
+        ${Cloud.ehDono() ? `<div class="row wrap mt">${(fb ? [['feedbackReparo', 'Mensagem p/ reparo'], ['feedbackCompra', 'Mensagem p/ compra de celular']] : [['oferta', 'Personalizar mensagem']])
+          .map(([k, l]) => `<button class="btn sm outline-gold" onclick="Pages.posvenda.editarMsg('${k}')">${icon(MSG_MODELOS[k].icone, 'sm')} ${l}</button>`).join('')}</div>` : ''}
       </div>
       <div class="card pad-0 mb"><div class="list-head"><b>${lista.length} cliente(s) para ${fb ? 'pedir feedback' : 'oferecer capa/película'}</b></div>
       ${lista.map(x => {
@@ -155,6 +155,7 @@ Pages.posvenda = {
     });
   },
   editarMsg(chave) {
+    if (!Cloud.ehDono()) return toast('Somente o dono altera as mensagens', true);
     const s = Store.s, md = MSG_MODELOS[chave], oferta = chave === 'oferta';
     const tipo = oferta ? 'oferta' : 'feedback';
     openModal({
@@ -272,10 +273,10 @@ Pages.relatorios = {
 
 Pages.config = {
   render(main) {
-    const s = Store.s;
+    const s = Store.s, dono = Cloud.ehDono();
     main.innerHTML = `
       ${pageHead('settings', 'Configurações', 'Dados da loja, metas, garantia, técnicos e backup.')}
-      <div class="card mb" id="cf-loja">
+${dono ? `      <div class="card mb" id="cf-loja">
         <h3>${icon('bag', 'sm')} Dados da <span class="gold">loja</span></h3>
         <p class="small muted" style="margin-top:0">Aparecem no cabeçalho da OS, garantia, orçamento e recibo.</p>
         ${field('Nome da loja', `<input class="input" name="loja" value="${esc(s.loja)}">`)}
@@ -318,12 +319,23 @@ Pages.config = {
         <label class="btn primary block mb">${icon('users')} Lista de clientes (PDF) — com telefones<input type="file" accept=".pdf,application/pdf" id="cf-clipdf" hidden></label>
         <label class="btn outline-gold block">${icon('upload')} Dossiê de auditoria (CSV) — OS, vendas, estoque<input type="file" accept=".csv,text/csv" id="cf-dossie" hidden></label>
       </div>
+` : `
+      <div class="card mb" style="border-color:rgba(212,175,55,.45)">
+        <h3>${icon('lock', 'sm')} Dados da <span class="gold">loja</span></h3>
+        <p class="small muted" style="margin-top:0">Somente o dono altera as informações da loja, metas, garantias e técnicos.</p>
+        <div class="kv"><span class="k">Loja</span><span class="v">${esc(s.loja || '—')}</span></div>
+        <div class="kv"><span class="k">Telefone</span><span class="v">${esc(s.telefone || '—')}</span></div>
+        <div class="kv"><span class="k">Endereço</span><span class="v">${esc(s.endereco || '—')}</span></div>
+        <div class="kv"><span class="k">Instagram</span><span class="v">${esc(s.instagram || '—')}</span></div>
+      </div>
+
+`}
 
       <div class="card mb">
         <h3>${icon('download', 'sm')} Backup dos <span class="gold">dados</span></h3>
         <p class="small muted" style="margin-top:0">Os dados ficam salvos neste aparelho/navegador. <b class="gold">Faça backup com frequência</b> e guarde o arquivo no Google Drive ou WhatsApp. Para usar em outro aparelho, restaure o backup lá.</p>
         <div class="grid grid-2"><button class="btn primary" onclick="Pages.config.backup()">${icon('download')} Baixar backup</button>
-        <label class="btn">${icon('upload')} Restaurar<input type="file" accept=".json,application/json" id="cf-restore" hidden></label></div>
+        ${dono ? `<label class="btn">${icon('upload')} Restaurar<input type="file" accept=".json,application/json" id="cf-restore" hidden></label>` : ''}</div>
         <p class="xs muted">Último backup: ${s.ultimoBackup ? fmtDateTime(s.ultimoBackup) : 'nunca'}</p>
       </div>
 
@@ -393,10 +405,13 @@ Pages.config = {
         <button class="btn block mt" onclick="App.logout()">${icon('logout')} Sair</button>
       </div>
 
-      <div class="card" style="border-color:rgba(248,113,113,.35)">
+      ${dono ? `<div class="card" style="border-color:rgba(248,113,113,.35)">
         <h3 class="red">Zona de perigo</h3>
         <button class="btn danger block" onclick="Pages.config.zerar()">${icon('trash')} Apagar todos os dados</button>
-      </div>`;
+      </div>` : ''}`;
+    if ($('#cf-membros')) this.renderMembros();
+    if ($('#cf-email')) this.emailInit();
+    if (!dono) return;
 
     $('#cf-save').onclick = () => {
       const f = readForm($('#cf-loja'));
@@ -416,8 +431,6 @@ Pages.config = {
     $('#cf-restore').onchange = e => this.restaurar(e.target.files[0]);
     $('#cf-dossie').onchange = e => { this.importarDossie(e.target.files[0]); e.target.value = ''; };
     $('#cf-clipdf').onchange = e => { this.importarClientesPdf(e.target.files[0]); e.target.value = ''; };
-    if ($('#cf-membros')) this.renderMembros();
-    if ($('#cf-email')) this.emailInit();
     const ff = $('#cf-func');
     if (ff) ff.onsubmit = async e => {
       e.preventDefault();
@@ -576,6 +589,7 @@ Pages.config = {
     toast('Backup gerado');
   },
   restaurar(file) {
+    if (!Cloud.ehDono()) return toast('Somente o dono pode restaurar backup', true);
     if (!file) return;
     const rd = new FileReader();
     rd.onload = async () => {
@@ -619,6 +633,7 @@ Pages.config = {
     });
   },
   async zerar() {
+    if (!Cloud.ehDono()) return toast('Somente o dono pode apagar os dados', true);
     if (!(await confirmDialog(`Apagar TODOS os dados (OS, clientes, estoque, financeiro)${Cloud.loja ? ' da loja, inclusive na nuvem e nos aparelhos da equipe' : ''}? Faça um backup antes. Esta ação não pode ser desfeita.`, { danger: true, ok: 'Apagar tudo' }))) return;
     if (!(await confirmDialog('Tem certeza absoluta?', { danger: true, ok: 'Sim, apagar' }))) return;
     const { auth, lojaId } = Store.db; Store.db = defaultDB(); Store.db.auth = auth; Store.db.lojaId = lojaId; Store.save();

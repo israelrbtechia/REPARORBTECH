@@ -141,6 +141,9 @@ const Cloud = {
     return data;
   },
 
+  // Só o dono altera as informações da loja (configurações). Sem nuvem, quem usa é o dono.
+  ehDono() { return !this.enabled || !this.loja || this.loja.papel === 'dono'; },
+
   /* Dados locais que ainda não pertencem a nenhuma loja (uso antes da nuvem) */
   temDadosLocais() {
     const d = Store.db;
@@ -204,6 +207,7 @@ const Cloud = {
     try {
       const local = this.localMap();
       const up = [], del = [];
+      if (!this.ehDono()) local.delete('meta:settings'); // funcionário não envia configurações da loja
       for (const [k, v] of local) { const h = hash(v.str); if (this.snap[k] !== h) up.push({ k, h, row: { loja_id: this.loja.id, colecao: v.col, id: v.id, dados: JSON.parse(v.str) } }); }
       for (const k of Object.keys(this.snap)) if (!local.has(k)) del.push(k);
       if (!up.length && !del.length) { this.setStatus('ok'); return; }
@@ -253,6 +257,7 @@ const Cloud = {
     // pendências locais (feitas durante o download) têm prioridade
     const local = this.localMap();
     const pend = fresh ? new Set() : new Set([...local].filter(([k, v]) => this.snap[k] !== hash(v.str)).map(([k]) => k));
+    if (!this.ehDono()) pend.delete('meta:settings'); // configurações sempre vêm do dono
     const seen = new Set();
     let mudou = 0;
     for (const r of rows) {
