@@ -24,6 +24,9 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 ## Pedido de orçamento pelo cliente
 Link público `/pedido/<id da loja>` (copie em **Configurações** ou em **OS → Pedidos**): o cliente informa nome, WhatsApp, marca, modelo, defeito e urgência. O pedido chega na hora com **pop-up e som**, aparece na aba **OS → Pedidos** (não lidos em destaque) e no Dashboard. Ao abrir: **Aceitar e criar orçamento** (já preenchido) → enviar o orçamento pelo WhatsApp. Requer a nuvem e o `schema.sql` atualizado.
 
+## Metas
+Aba **Metas** com dashboard do mês: metas de quantidade ligadas a produtos do cadastro (ex.: 20 fones bluetooth, 10 capas premium), meta de celulares (qualquer novo ou seminovo vendido conta) e **lucro mínimo por aparelho** (ex.: R$ 400), com média, vendas que bateram/ficaram abaixo, ritmo diário e projeção. A Nova venda avisa quando o lucro do aparelho fica abaixo da meta.
+
 ## Aparelhos (estoque de celulares)
 Aba **Aparelhos**: celulares seminovos e novos à venda, com custo, preço, lucro, dias parado e status (disponível / reservado / em revisão). Edição rápida de preço e status, anúncio pronto para WhatsApp, **venda com troca** (o aparelho do cliente abate do valor e entra no estoque em revisão) e **compra de aparelho** de cliente. Compras de estoque saem do caixa mas só entram no lucro como custo quando o item é vendido.
 

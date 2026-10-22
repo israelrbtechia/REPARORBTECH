@@ -200,7 +200,9 @@ const VendasPage = {
         ${desc ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(desc)}</span></div>` : ''}
         ${troca ? `<div class="kv"><span class="k">Aparelho na troca</span><span class="v red">-${money(troca)}</span></div>` : ''}
         <div class="kv"><span class="k bold">${pagar >= 0 ? 'Cliente paga' : 'Loja devolve'}</span><span class="v gold" style="font-size:24px">${money(Math.abs(pagar))}</span></div>
-        <div class="xs muted">Lucro estimado: ${money(sub - desc - custo)}</div>`;
+        <div class="xs muted">Lucro estimado: ${money(sub - desc - custo)}</div>
+        ${sale.itens.filter(i => i.aparelho || i.seminovo).map(i => { const lu = i.preco - (i.custo || 0) - desc * i.preco / (sub || 1); const mt = Metas.lucroMeta();
+          return i.custo ? `<div class="xs ${lu >= mt ? 'green' : 'red'}">${esc(i.nome)}: lucro ${money(lu)} ${lu >= mt ? '✓ bate a meta' : `· meta ${money(mt)} (faltam ${money(mt - lu)})`}</div>` : ''; }).join('')}`;
       return { sub, desc, troca };
     };
 

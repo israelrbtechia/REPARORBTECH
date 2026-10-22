@@ -4,6 +4,7 @@ const SESSION_KEY = 'rbtech_session';
 const NAV = [
   ['Gestão Operacional', [
     ['dashboard', 'Dashboard', 'dash'],
+    ['metas', 'Metas', 'star'],
     ['bancada', 'Bancada', 'phone'],
     ['os', 'Ordens de Serviço', 'file'],
     ['orcamentos', 'Orçamentos', 'card'],

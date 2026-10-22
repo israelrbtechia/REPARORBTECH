@@ -1,0 +1,203 @@
+/* Metas do mês: quantidade vendida por produto (ligada a produtos do cadastro),
+   celulares vendidos (qualquer novo ou seminovo) e lucro por aparelho vendido */
+const Metas = {
+  // Configuração guardada nas configurações da loja (sincroniza com a nuvem)
+  cfg() {
+    const s = Store.s;
+    if (!s.metas) {
+      s.metas = {
+        lucroPorAparelho: 400,
+        itens: [
+          { id: uid(), tipo: 'celulares', nome: 'iPhones / celulares', alvo: 32 },
+          { id: uid(), tipo: 'produtos', nome: 'Fone bluetooth', alvo: 20, produtoIds: [] },
+          { id: uid(), tipo: 'produtos', nome: 'Capa premium', alvo: 10, produtoIds: [], autoBusca: 'case premium|capa premium' },
+          { id: uid(), tipo: 'produtos', nome: 'Película hidrogel', alvo: 10, produtoIds: [], autoBusca: 'hidrogel' },
+        ],
+      };
+      Store.save();
+    }
+    // metas iniciais se ligam sozinhas quando o produto aparecer no cadastro (até você escolher manualmente)
+    for (const it of s.metas.itens) {
+      if (!it.autoBusca || (it.produtoIds || []).length) continue;
+      const re = new RegExp(it.autoBusca, 'i');
+      const ids = Store.db.produtos.filter(p => !p.deleted && !ehCelular(p) && re.test(p.nome)).map(p => p.id);
+      if (ids.length) { it.produtoIds = ids; Store.save(); }
+    }
+    return s.metas;
+  },
+  lucroMeta() { return Number(this.cfg().lucroPorAparelho) || 0; },
+
+  // Itens vendidos no mês (com lucro de cada item, já descontando o desconto proporcional)
+  vendidos(mes) {
+    const out = [];
+    for (const v of Store.db.vendas) {
+      if (v.cancelada || monthKey(v.data) !== mes) continue;
+      const sub = v.itens.reduce((s, i) => s + i.preco * i.qtd, 0) || 1;
+      for (const i of v.itens) {
+        const desc = (v.desconto || 0) * (i.preco * i.qtd) / sub;
+        out.push({ ...i, venda: v, celular: !!(i.aparelho || i.seminovo), temCusto: (i.custo || 0) > 0, lucro: (i.preco - (i.custo || 0)) * i.qtd - desc });
+      }
+    }
+    return out;
+  },
+
+  progresso(meta, vendidos) {
+    const its = meta.tipo === 'celulares' ? vendidos.filter(i => i.celular) : vendidos.filter(i => (meta.produtoIds || []).includes(i.id));
+    return { feito: its.reduce((s, i) => s + i.qtd, 0), itens: its };
+  },
+};
+
+Pages.metas = {
+  mes: null,
+  render(main) {
+    const cfg = Metas.cfg();
+    const mes = this.mes || monthKey();
+    const [ano, m] = mes.split('-').map(Number);
+    const diasMes = new Date(ano, m, 0).getDate();
+    const atual = mes === monthKey();
+    const passados = atual ? new Date().getDate() : mes < monthKey() ? diasMes : 0;
+    const restantes = Math.max(0, diasMes - passados + (atual ? 1 : 0));
+    const vend = Metas.vendidos(mes);
+    const nomeMes = new Date(ano, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    const linhas = cfg.itens.map(meta => {
+      const { feito } = Metas.progresso(meta, vend);
+      const alvo = Number(meta.alvo) || 0;
+      const pct = alvo ? Math.min(100, feito / alvo * 100) : 0;
+      const falta = Math.max(0, alvo - feito);
+      const proj = passados ? Math.round(feito / passados * diasMes) : 0;
+      const semProduto = meta.tipo === 'produtos' && !(meta.produtoIds || []).length;
+      return { meta, feito, alvo, pct, falta, proj, semProduto };
+    });
+    const geral = linhas.length ? linhas.reduce((s, l) => s + l.pct, 0) / linhas.length : 0;
+
+    // lucro por aparelho
+    const cels = vend.filter(i => i.celular);
+    const comCusto = cels.filter(i => i.temCusto);
+    const meta = Metas.lucroMeta();
+    const lucroTotal = comCusto.reduce((s, i) => s + i.lucro, 0);
+    const unid = comCusto.reduce((s, i) => s + i.qtd, 0);
+    const media = unid ? lucroTotal / unid : 0;
+    const bateram = comCusto.filter(i => i.lucro / i.qtd >= meta).length;
+    const metaCel = cfg.itens.find(i => i.tipo === 'celulares');
+    const alvoLucro = (Number(metaCel?.alvo) || 0) * meta;
+
+    main.innerHTML = `
+      ${pageHead('star', 'Metas', 'Acompanhe as metas de vendas e de lucro do mês.')}
+      <div class="row between mb">
+        <button class="btn sm" onclick="Pages.metas.mudarMes(-1)">${icon('arrowLeft', 'sm')}</button>
+        <b style="text-transform:capitalize">${esc(nomeMes)}</b>
+        <button class="btn sm" onclick="Pages.metas.mudarMes(1)" ${atual ? 'disabled' : ''}>${icon('arrowRight', 'sm')}</button>
+      </div>
+      <div class="hero mb">
+        <div class="row between"><div class="small muted bold" style="letter-spacing:.12em">PROGRESSO GERAL</div>
+          <button class="btn sm outline-gold" onclick="Pages.metas.editar()">${icon('edit', 'sm')} Editar metas</button></div>
+        <div class="big gold">${Math.round(geral)}%</div>
+        <div class="progress"><div style="width:${geral}%"></div></div>
+        <div class="small muted">${atual ? `${restantes} dia(s) restante(s) no mês` : mes < monthKey() ? 'Mês encerrado' : ''}</div>
+      </div>
+
+      <div class="grid grid-auto mb">
+        ${linhas.map(l => `<div class="card">
+          <div class="row between" style="align-items:flex-start">
+            <div class="grow"><b style="font-size:17px">${esc(l.meta.nome)}</b>
+              <div class="xs muted">${l.meta.tipo === 'celulares' ? 'Qualquer celular vendido, novo ou seminovo' : l.semProduto ? '<span class="red">Escolha os produtos desta meta</span>' : `${l.meta.produtoIds.length} produto(s) ligado(s)`}</div></div>
+            ${l.feito >= l.alvo && l.alvo ? '<span class="pill green">Batida! 🏆</span>' : ''}
+          </div>
+          <div class="row" style="align-items:baseline;gap:6px;margin-top:10px"><span class="gold" style="font-size:34px;font-weight:800">${l.feito}</span><span class="muted">/ ${l.alvo}</span></div>
+          <div class="progress" style="margin:8px 0"><div style="width:${l.pct}%"></div></div>
+          <div class="row between xs muted"><span>${l.falta ? `Faltam <b style="color:var(--text)">${l.falta}</b>` : 'Meta cumprida'}</span>
+            <span>${atual && l.falta && restantes ? `~${(l.falta / restantes).toFixed(1).replace('.', ',')} por dia` : ''}${atual && passados ? ` · projeção ${l.proj}` : ''}</span></div>
+          ${l.semProduto ? `<button class="btn sm outline-gold block mt" onclick="Pages.metas.escolherProdutos('${l.meta.id}')">${icon('plus', 'sm')} Escolher produtos</button>` : ''}
+        </div>`).join('')}
+      </div>
+
+      <div class="card mb">
+        <div class="row between"><h3 style="margin:0">${icon('trending', 'sm')} Lucro por <span class="gold">aparelho</span></h3><span class="pill gold">Meta ${money(meta)} cada</span></div>
+        <div class="grid grid-2 mt">
+          <div class="stat"><div class="label">Média por aparelho</div><div class="value ${media >= meta ? 'green' : unid ? 'red' : ''}" style="font-size:22px;white-space:nowrap">${unid ? money(media) : '—'}</div><div class="sub">${unid} aparelho(s) com custo informado</div></div>
+          <div class="stat"><div class="label">Vendas que bateram</div><div class="value">${bateram}<span class="muted" style="font-size:16px"> / ${comCusto.length}</span></div><div class="sub">lucro de ${money(meta)} ou mais</div></div>
+        </div>
+        <div class="mt"><div class="row between small"><span>Lucro com aparelhos no mês</span><b>${money(lucroTotal)} <span class="muted">/ ${money(alvoLucro)}</span></b></div>
+          <div class="progress"><div style="width:${alvoLucro ? Math.min(100, lucroTotal / alvoLucro * 100) : 0}%"></div></div>
+          <div class="xs muted">Meta do mês = ${metaCel?.alvo || 0} aparelhos × ${money(meta)}</div></div>
+        ${cels.length - comCusto.length ? `<div class="info-box mt">${icon('info')}<span>${cels.length - comCusto.length} aparelho(s) vendido(s) sem custo cadastrado não entram no cálculo de lucro (ex.: vendas importadas do sistema antigo).</span></div>` : ''}
+        ${comCusto.length ? `<div class="lbl mt mb">Aparelhos vendidos</div>${comCusto.slice().sort((a, b) => String(b.venda.data).localeCompare(String(a.venda.data))).map(i => {
+          const lu = i.lucro / i.qtd; const ok = lu >= meta;
+          return `<div class="cart-line" style="cursor:pointer" onclick="VendasPage.detalheVenda('${i.venda.id}')"><div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(i.nome)}</b><div class="xs muted">Venda #${i.venda.numero} · ${fmtDate(i.venda.data)} · ${money(i.preco)}</div></div>
+            <div class="right"><b class="${ok ? 'green' : 'red'}">${money(lu)}</b><div class="xs ${ok ? 'green' : 'red'}">${ok ? '✓ bateu' : `faltou ${money(meta - lu)}`}</div></div></div>`;
+        }).join('')}` : ''}
+      </div>`;
+  },
+
+  mudarMes(d) {
+    const [a, m] = (this.mes || monthKey()).split('-').map(Number);
+    const dt = new Date(a, m - 1 + d, 1);
+    this.mes = monthKey(dt) > monthKey() ? monthKey() : monthKey(dt);
+    App.refresh();
+  },
+
+  editar() {
+    const cfg = JSON.parse(JSON.stringify(Metas.cfg()));
+    const m = openModal({
+      title: 'Editar metas', icon: 'star', wide: true,
+      body: `${field('Lucro mínimo por aparelho vendido (R$)', `<input class="input" id="mt-lucro" inputmode="decimal" value="${moneyInput(cfg.lucroPorAparelho)}">`)}
+        <div class="lbl mb">Metas de quantidade no mês</div><div id="mt-lista"></div>
+        <button class="btn outline-gold block" id="mt-add">${icon('plus')} Nova meta de produto</button>`,
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="mt-ok">${icon('check')} Salvar metas</button>`,
+    });
+    const el = m.el;
+    const lista = () => {
+      $('#mt-lista', el).innerHTML = cfg.itens.map((it, k) => `<div class="card mb" style="padding:12px 14px">
+        <div class="row"><input class="input grow" data-nome="${k}" value="${esc(it.nome)}" ${it.tipo === 'celulares' ? '' : ''}>
+          <input class="input" data-alvo="${k}" type="number" min="0" value="${it.alvo}" style="width:84px;text-align:center">
+          ${it.tipo === 'celulares' ? '' : `<button class="icon-btn" data-rm="${k}">${icon('trash', 'sm')}</button>`}</div>
+        <div class="xs muted mt">${it.tipo === 'celulares' ? 'Conta automaticamente qualquer celular vendido (novo ou seminovo).'
+          : `${(it.produtoIds || []).map(id => Store.produto(id)?.nome).filter(Boolean).map(esc).join(' · ') || '<span class="red">Nenhum produto ligado</span>'}
+             <button class="btn sm ghost" data-prod="${k}" style="min-height:28px;padding:2px 8px">${icon('edit', 'sm')} Produtos</button>`}</div></div>`).join('');
+      $$('[data-nome]', el).forEach(i => i.oninput = () => { cfg.itens[+i.dataset.nome].nome = i.value; });
+      $$('[data-alvo]', el).forEach(i => i.oninput = () => { cfg.itens[+i.dataset.alvo].alvo = +i.value || 0; });
+      $$('[data-rm]', el).forEach(b => b.onclick = () => { cfg.itens.splice(+b.dataset.rm, 1); lista(); });
+      $$('[data-prod]', el).forEach(b => b.onclick = () => this.escolherProdutos(null, cfg.itens[+b.dataset.prod], lista));
+    };
+    lista();
+    $('#mt-add', el).onclick = () => { const it = { id: uid(), tipo: 'produtos', nome: 'Nova meta', alvo: 10, produtoIds: [] }; cfg.itens.push(it); lista(); this.escolherProdutos(null, it, lista); };
+    $('#mt-ok', el).onclick = () => {
+      if (cfg.itens.some(i => i.tipo === 'produtos' && !(i.produtoIds || []).length) && !confirm('Há metas sem produto ligado (não vão contar vendas). Salvar mesmo assim?')) return;
+      cfg.lucroPorAparelho = parseMoney($('#mt-lucro', el).value);
+      Store.s.metas = cfg; Store.save(); m.close(); App.refresh(); toast('Metas salvas');
+    };
+  },
+
+  // Liga uma meta a produtos do cadastro (pode escolher vários: ex. todos os fones bluetooth)
+  escolherProdutos(metaId, metaObj, depois) {
+    const meta = metaObj || Metas.cfg().itens.find(i => i.id === metaId);
+    const sel = new Set(meta.produtoIds || []);
+    const prods = Store.db.produtos.filter(p => !p.deleted && !ehCelular(p)).sort((a, b) => a.nome.localeCompare(b.nome));
+    const palavras = norm(meta.nome).split(/\s+/).filter(w => w.length > 3);
+    const sugere = p => palavras.some(w => norm(p.nome).includes(w.replace(/s$/, '')));
+    const m = openModal({
+      title: `Produtos da meta: ${meta.nome}`, icon: 'tag',
+      body: `<p class="small muted" style="margin-top:0">Marque os produtos que contam para esta meta. Sugestões pelo nome da meta aparecem primeiro.</p>
+        ${inputIcon('search', 'id="ep-q" placeholder="Buscar produto..."')}
+        <div id="ep-list" class="card pad-0 mt" style="max-height:46vh;overflow:auto"></div>
+        <div class="info-box mt">${icon('info')}<span>Não achou? <a href="#" id="ep-novo">Cadastrar o produto "${esc(meta.nome)}"</a> agora.</span></div>`,
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="ep-ok">${icon('check')} Usar <span id="ep-n">${sel.size}</span> produto(s)</button>`,
+    });
+    const el = m.el;
+    const render = () => {
+      const q = $('#ep-q', el).value;
+      const l = prods.filter(p => matches(q, p.nome, p.categoria, p.codigo)).sort((a, b) => (sel.has(b.id) - sel.has(a.id)) || (sugere(b) - sugere(a)) || a.nome.localeCompare(b.nome));
+      $('#ep-list', el).innerHTML = l.slice(0, 150).map(p => `<label class="check" style="padding:10px 14px;border-bottom:1px solid var(--line)"><input type="checkbox" data-p="${p.id}" ${sel.has(p.id) ? 'checked' : ''}>
+        <span class="grow">${esc(p.nome)}${sugere(p) && !sel.has(p.id) ? ' <span class="pill gold xs">sugestão</span>' : ''}<br><span class="xs muted">estoque ${p.qtd} · ${money(p.preco)}</span></span></label>`).join('') || '<div class="empty small">Nenhum produto</div>';
+      $$('[data-p]', el).forEach(c => c.onchange = () => { c.checked ? sel.add(c.dataset.p) : sel.delete(c.dataset.p); $('#ep-n', el).textContent = sel.size; });
+    };
+    $('#ep-q', el).oninput = render; render();
+    $('#ep-novo', el).onclick = e => { e.preventDefault(); m.close(); EstoquePage.editar('produto', null, { tipoProduto: 'acessorio', nome: meta.nome }); };
+    $('#ep-ok', el).onclick = () => {
+      meta.produtoIds = [...sel]; delete meta.autoBusca;
+      if (!metaObj) { Store.save(); App.refresh(); toast('Produtos da meta atualizados'); }
+      m.close(); depois && depois();
+    };
+  },
+};

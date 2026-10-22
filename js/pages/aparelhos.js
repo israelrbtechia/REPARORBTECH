@@ -184,7 +184,8 @@ const AparelhosPage = {
             ${desc ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(desc)}</span></div>` : ''}
             ${troca ? `<div class="kv"><span class="k">Aparelho na troca</span><span class="v red">-${money(troca)}</span></div>` : ''}
             <div class="kv"><span class="k bold">${pagar >= 0 ? 'Cliente paga' : 'Loja devolve ao cliente'}</span><span class="v gold" style="font-size:22px">${money(Math.abs(pagar))}</span></div>
-            <div class="xs muted">Lucro desta venda: ${money(preco - desc - (p.custo || 0))}</div>`;
+            <div class="xs muted">Lucro desta venda: ${money(preco - desc - (p.custo || 0))}</div>
+            ${p.custo ? (() => { const lu = preco - desc - p.custo, mt = Metas.lucroMeta(); return `<div class="xs ${lu >= mt ? 'green' : 'red'}">${lu >= mt ? '✓ Bate a meta de lucro' : `Abaixo da meta de lucro (${money(mt)}): faltam ${money(mt - lu)}`}</div>`; })() : ''}`;
           return { preco, desc, troca, pagar };
         };
         $('#vx-ap', el).onchange = setAp;

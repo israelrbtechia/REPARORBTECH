@@ -57,6 +57,10 @@ Pages.dashboard = {
           </div>`).join('')}
       </div>
 
+      ${(() => { const cfg = Metas.cfg(), vend = Metas.vendidos(monthKey());
+        const ls = cfg.itens.map(mt => ({ n: mt.nome, f: Metas.progresso(mt, vend).feito, a: Number(mt.alvo) || 0 }));
+        return `<div class="card mb" style="cursor:pointer" onclick="App.go('metas')"><div class="row between"><b>${icon('star', 'sm')} Metas do mês</b>${icon('chevRight')}</div>
+          <div class="grid grid-2 mt" style="gap:10px">${ls.map(l => `<div><div class="row between xs"><span class="ellipsis">${esc(l.n)}</span><b class="${l.a && l.f >= l.a ? 'green' : 'gold'}">${l.f}/${l.a}</b></div><div class="progress" style="height:7px;margin:4px 0 0"><div style="width:${l.a ? Math.min(100, l.f / l.a * 100) : 0}%"></div></div></div>`).join('')}</div></div>`; })()}
       ${(() => { const n = Pedidos.naoLidos().length; return n ? `<div class="card mb row" style="cursor:pointer;border-color:rgba(212,175,55,.6);background:rgba(212,175,55,.08)" onclick="App.go('os',{tab:'pedidos'})">
         <div class="stat-icon"><div class="ic">${icon('bell')}</div></div>
         <div class="grow"><b>${n} pedido${n > 1 ? 's' : ''} de orçamento não lido${n > 1 ? 's' : ''}</b><div class="small muted">Enviados pelos clientes pelo link</div></div>${icon('chevRight')}</div>` : ''; })()}
