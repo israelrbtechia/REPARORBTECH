@@ -106,26 +106,62 @@ const OSPage = {
     }
     Store.setOSStatus(o, k);
     toast(`OS #${o.numero}: ${OS_STATUS[k].label}`);
-    if (k === 'concluido') this.avisarPronto(o);
-    this.afterChange();
+    App.refresh();
+    if (k === 'concluido') this.reparoFinalizado(o);
   },
 
-  afterChange() { if (modalStack.length) { /* modal de detalhe reabre atualizado */ } App.refresh(); },
-
-  avisarPronto(o) {
-    const c = Store.cliente(o.clienteId);
-    if (!c?.telefone) return;
-    openModal({
-      title: 'Avisar o cliente?', icon: 'whatsapp', subtitle: `OS #${o.numero} concluída`,
-      body: `<p style="margin-top:0">Enviar mensagem pelo WhatsApp avisando <b class="gold">${esc(c.nome)}</b> que o aparelho está pronto?</p>`,
-      foot: `<button class="btn" data-close>Agora não</button><a class="btn success" target="_blank" href="${waLink(c.telefone, this.msgPronto(o, c))}" onclick="closeAllModals()">${icon('whatsapp')} Enviar</a>`,
-    });
+  /* ---------- Link de acompanhamento ---------- */
+  // Só existe com a nuvem ligada (a página pública lê a OS no Supabase)
+  link(o) { return Cloud.loja ? Store.linkOS(o) : null; },
+  trechoLink(o) { const l = this.link(o); return l ? `\n\n🔎 Acompanhe o status em tempo real:\n${l}` : ''; },
+  msgEntrada(o, c) {
+    return `Olá ${c.nome.split(' ')[0]}! Recebemos seu aparelho *${o.aparelho?.modelo || ''}* na ${Store.s.loja}. 📱\n\nOS: *#${o.numero}*\nDefeito: ${o.defeito}${o.valor ? `\nValor: ${money(Store.osTotal(o))}` : ''}${o.previsao ? `\nPrevisão: ${fmtDate(o.previsao)}` : ''}${this.trechoLink(o)}`;
   },
   msgPronto(o, c) {
-    return `Olá ${c.nome.split(' ')[0]}! Aqui é da ${Store.s.loja}. 📱✅\n\nSeu aparelho *${o.aparelho?.modelo || ''}* (OS #${o.numero}) está *pronto para retirada*!\n\nValor: *${money(Store.osTotal(o))}*\n\nAguardamos você!`;
+    return `Olá ${c.nome.split(' ')[0]}! Aqui é da ${Store.s.loja}. 📱✅\n\nSeu aparelho *${o.aparelho?.modelo || ''}* (OS #${o.numero}) está *pronto para retirada*!\n\nValor: *${money(Store.osTotal(o))}*\nGarantia: *3 meses* (até ${fmtDate(Store.garantiaFim(o) || addDays(new Date(), GARANTIA_REPARO_DIAS))})${this.link(o) ? `\n\n📄 Acompanhe e baixe sua garantia em PDF:\n${this.link(o)}` : ''}\n\nAguardamos você!`;
   },
   msgStatus(o, c) {
-    return `Olá ${c.nome.split(' ')[0]}! Aqui é da ${Store.s.loja}.\n\nAtualização da sua OS #${o.numero} (${o.aparelho?.modelo || ''}):\nStatus: *${OS_STATUS[o.status].label}*${o.previsao ? `\nPrevisão: ${fmtDate(o.previsao)}` : ''}\nValor: ${money(Store.osTotal(o))}`;
+    return `Olá ${c.nome.split(' ')[0]}! Aqui é da ${Store.s.loja}.\n\nAtualização da sua OS #${o.numero} (${o.aparelho?.modelo || ''}):\nStatus: *${OS_STATUS[o.status].label}*${o.previsao ? `\nPrevisão: ${fmtDate(o.previsao)}` : ''}\nValor: ${money(Store.osTotal(o))}${this.trechoLink(o)}`;
+  },
+  async copiarLink(id) {
+    const o = Store.osById(id); const l = this.link(o);
+    if (!l) return toast('Ligue a nuvem (Supabase) para usar o link de acompanhamento', true);
+    try { await navigator.clipboard.writeText(l); toast('Link copiado'); } catch { prompt('Copie o link:', l); }
+  },
+  abrirWhats(id, tipo) {
+    const o = Store.osById(id), c = Store.cliente(o.clienteId);
+    if (!c?.telefone) return toast('Cliente sem telefone cadastrado', true);
+    const msg = tipo === 'entrada' ? this.msgEntrada(o, c) : tipo === 'pronto' ? this.msgPronto(o, c) : this.msgStatus(o, c);
+    window.open(waLink(c.telefone, msg), '_blank');
+  },
+
+  /* ---------- PDF de garantia ---------- */
+  async pdfGarantia(id, compartilhar) {
+    const o = Store.osById(id);
+    if (!o.concluidoEm && o.status !== 'pago') { o.concluidoEm = nowISO(); Store.saveOS(o); }
+    toast('Gerando PDF da garantia...');
+    const d = GarantiaDados.os(o);
+    const doc = await Pdf.garantia(d);
+    if (compartilhar) await Pdf.compartilhar(doc, Pdf.nome(d), `Garantia da OS #${o.numero} — ${Store.s.loja}`);
+    else Pdf.baixar(doc, Pdf.nome(d));
+  },
+
+  // Ao concluir o reparo: garantia em PDF + aviso ao cliente
+  reparoFinalizado(o) {
+    const c = Store.cliente(o.clienteId) || {};
+    openModal({
+      title: 'Reparo finalizado!', icon: 'shieldCheck', subtitle: `OS #${o.numero} · ${c.nome || ''} · ${o.aparelho?.modelo || ''}`,
+      body: `<div class="card center mb" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)">
+          <div class="small muted">Garantia do reparo</div><div class="gold bold" style="font-size:26px">3 meses</div>
+          <div class="small">${fmtDate(Store.garantiaInicio(o))} até <b>${fmtDate(Store.garantiaFim(o))}</b></div></div>
+        <div class="col">
+          <button class="btn primary" onclick="OSPage.pdfGarantia('${o.id}', true)">${icon('upload')} Compartilhar PDF da garantia</button>
+          <button class="btn" onclick="OSPage.pdfGarantia('${o.id}')">${icon('download')} Baixar PDF da garantia</button>
+          ${c.telefone ? `<button class="btn success" onclick="OSPage.abrirWhats('${o.id}','pronto')">${icon('whatsapp')} Avisar que está pronto${this.link(o) ? ' + link da garantia' : ''}</button>` : ''}
+        </div>
+        <p class="xs muted" style="margin-bottom:0">No celular, "Compartilhar" abre o WhatsApp com o PDF anexado. ${this.link(o) ? 'O cliente também pode baixar a garantia pelo link de acompanhamento.' : ''}</p>`,
+      foot: `<button class="btn" data-close>Fechar</button>`,
+    });
   },
 
   /* ---------- Pagamento ---------- */
@@ -173,9 +209,10 @@ const OSPage = {
           <div><b>Responsável e assinatura técnica</b><div class="small muted">Identifica quem acompanhou o serviço e preenche a assinatura do técnico nos documentos.</div></div></div>
           <div class="mt" id="gar-tec"></div>
         </div>
-        ${field('Dias de garantia', `<input class="input" type="number" min="0" id="gar-dias" value="${o.garantiaDias ?? s.garantiaDias}">`)}`,
-      foot: `<button class="btn primary block" id="gar-print">${icon('printer')} Imprimir garantia</button>
-        ${Store.cliente(o.clienteId)?.telefone ? `<a class="btn success" target="_blank" href="${waLink(Store.cliente(o.clienteId).telefone, `Olá! Obrigado por escolher a ${s.loja}. 🙏\n\nSeu serviço (OS #${o.numero}) tem *garantia de ${o.garantiaDias ?? s.garantiaDias} dias*, válida até ${fmtDate(addDays(o.pagoEm || nowISO(), o.garantiaDias ?? s.garantiaDias))}.\n\nQualquer coisa, estamos à disposição!`)}">${icon('whatsapp')} Enviar no WhatsApp</a>` : ''}
+        <div class="card mt center"><div class="small muted">Garantia do reparo</div><b class="gold" style="font-size:20px">3 meses</b><div class="small">até ${fmtDate(Store.garantiaFim(o))}</div></div>`,
+      foot: `<button class="btn primary block" id="gar-share" style="flex-basis:100%">${icon('upload')} Compartilhar PDF da garantia</button>
+        <button class="btn" id="gar-pdf">${icon('download')} Baixar PDF</button>
+        ${Store.cliente(o.clienteId)?.telefone ? `<a class="btn success" target="_blank" href="${waLink(Store.cliente(o.clienteId).telefone, `Olá! Obrigado por escolher a ${s.loja}. 🙏\n\nSeu serviço (OS #${o.numero}) tem *garantia de 3 meses*, válida até ${fmtDate(Store.garantiaFim(o))}.${this.link(o) ? `\n\n📄 Baixe sua garantia em PDF:\n${this.link(o)}` : ''}\n\nQualquer coisa, estamos à disposição!`)}">${icon('whatsapp')} WhatsApp</a>` : ''}
         <button class="btn" data-close>Fechar</button>`,
       onMount: (el) => {
         const renderTec = () => {
@@ -189,12 +226,9 @@ const OSPage = {
           const sg = $('#gar-sign', el); if (sg) sg.onclick = () => Pages.config.assinar(tecs.find(x => x.id === tecId), renderTec);
         };
         renderTec();
-        $('#gar-print', el).onclick = () => {
-          o.garantiaDias = Number($('#gar-dias', el).value) || 0;
-          if (tecId) o.tecnicoId = tecId;
-          Store.saveOS(o);
-          Print.garantia(o, tecId);
-        };
+        const gerar = comp => { if (tecId) { o.tecnicoId = tecId; Store.saveOS(o); } this.pdfGarantia(o.id, comp); };
+        $('#gar-share', el).onclick = () => gerar(true);
+        $('#gar-pdf', el).onclick = () => gerar(false);
       },
     });
     return m;
@@ -296,11 +330,12 @@ const OSPage = {
     openModal({
       title: `OS #${o.numero} criada`, icon: 'checkCircle', subtitle: `${c.nome} · ${o.aparelho.modelo}`,
       body: `<p class="muted" style="margin-top:0">O que deseja fazer agora?</p>
-        <div class="col">
-          <button class="btn primary" onclick="Print.os(Store.osById('${o.id}'))">${icon('printer')} Imprimir OS (2 vias)</button>
+        <div class="col" id="pc-acoes">
+          ${c.telefone ? `<button class="btn success" style="min-height:54px;font-size:16px" onclick="OSPage.abrirWhats('${o.id}','entrada')">${icon('whatsapp')} ${this.link(o) ? 'Enviar link pelo WhatsApp' : 'Enviar comprovante no WhatsApp'}</button>` : `<div class="info-box">${icon('info')}<span>Cliente sem telefone: cadastre o WhatsApp para enviar o link.</span></div>`}
+          ${this.link(o) ? `<button class="btn outline-gold" onclick="OSPage.copiarLink('${o.id}')">${icon('repeat')} Copiar link de acompanhamento</button>` : `<div class="xs muted">Ligue a nuvem (Supabase) para enviar o link de acompanhamento em tempo real.</div>`}
+          <button class="btn" onclick="Print.os(Store.osById('${o.id}'))">${icon('printer')} Imprimir OS (2 vias)</button>
           <button class="btn" onclick="Print.osEtiqueta(Store.osById('${o.id}'))">${icon('tag')} Imprimir etiqueta do aparelho</button>
           <button class="btn" onclick="OSPage.assinaturaCliente('${o.id}')">${icon('pen')} Coletar assinatura do cliente</button>
-          ${c.telefone ? `<a class="btn success" target="_blank" href="${waLink(c.telefone, `Olá ${c.nome.split(' ')[0]}! Recebemos seu aparelho *${o.aparelho.modelo}* na ${Store.s.loja}.\n\nOS: *#${o.numero}*\nDefeito: ${o.defeito}\n${o.valor ? `Valor: ${money(Store.osTotal(o))}\n` : ''}${o.previsao ? `Previsão: ${fmtDate(o.previsao)}\n` : ''}\nVamos te mantendo informado!`)}">${icon('whatsapp')} Enviar comprovante no WhatsApp</a>` : ''}
         </div>`,
       foot: `<button class="btn" data-close>Concluir</button><button class="btn outline-gold" onclick="closeAllModals();OSPage.detalhe('${o.id}')">Ver OS</button>`,
     });
@@ -339,7 +374,7 @@ const OSPage = {
       </div>
       <div class="form-row">
         ${field('Senha / padrão', `<input class="input" name="senha" placeholder="Senha do aparelho" value="${esc(o.senha || '')}">`, { opt: true })}
-        ${field('Garantia (dias)', `<input class="input" type="number" name="garantiaDias" value="${o.garantiaDias ?? Store.s.garantiaDias}">`)}
+        <div class="field"><label>Garantia</label><div class="input" style="display:flex;align-items:center;color:var(--gold);font-weight:700">3 meses</div></div>
       </div>
       ${field('Acessórios deixados', `<input class="input" name="acessorios" placeholder="Ex: Capinha, carregador, chip" value="${esc(o.acessorios || '')}">`, { opt: true })}
       <details class="mb" ${Object.keys(ck).length ? 'open' : ''}><summary class="lbl" style="cursor:pointer;padding:8px 0">${icon('checkCircle', 'sm')} Checklist de entrada <span class="opt muted">(toque para marcar OK / com defeito)</span></summary>
@@ -352,7 +387,6 @@ const OSPage = {
     if (cat) cat.onchange = () => {
       const s = Store.db.servicos.find(x => x.id === cat.value); if (!s) return;
       $('[name=servico]', root).value = s.nome; $('[name=valor]', root).value = moneyInput(s.preco);
-      if (s.garantiaDias != null) $('[name=garantiaDias]', root).value = s.garantiaDias;
     };
     $$('[data-ck]', root).forEach(b => b.onclick = () => {
       const nx = { '': 'ok', ok: 'nok', nok: '' }[b.dataset.v];
@@ -365,7 +399,7 @@ const OSPage = {
     const f = readForm(root);
     const checklist = {};
     $$('[data-ck]', root).forEach(b => { if (b.dataset.v) checklist[b.dataset.ck] = b.dataset.v; });
-    return { defeito: f.defeito, servico: f.servico, valor: parseMoney(f.valor), previsao: f.previsao || null, status: f.status, tecnicoId: f.tecnicoId, senha: f.senha, garantiaDias: Number(f.garantiaDias) || 0, acessorios: f.acessorios, obs: f.obs, checklist };
+    return { defeito: f.defeito, servico: f.servico, valor: parseMoney(f.valor), previsao: f.previsao || null, status: f.status, tecnicoId: f.tecnicoId, senha: f.senha, acessorios: f.acessorios, obs: f.obs, checklist };
   },
 
   /* ---------- Detalhe ---------- */
@@ -404,7 +438,7 @@ const OSPage = {
           <div class="kv"><span class="k">Serviço</span><span class="v">${esc(o.servico || '—')}</span></div>
           <div class="kv"><span class="k">Técnico</span><span class="v">${esc(tec?.nome || '—')}</span></div>
           <div class="kv"><span class="k">Acessórios</span><span class="v">${esc(o.acessorios || '—')}</span></div>
-          <div class="kv"><span class="k">Garantia</span><span class="v">${o.garantiaDias ?? Store.s.garantiaDias} dias${o.pagoEm ? ` · até ${fmtDate(addDays(o.pagoEm, o.garantiaDias ?? Store.s.garantiaDias))}` : ''}</span></div>
+          <div class="kv"><span class="k">Garantia</span><span class="v">3 meses${Store.garantiaFim(o) ? ` · até <span class="gold">${fmtDate(Store.garantiaFim(o))}</span>` : ' (conta a partir da conclusão)'}</span></div>
           ${o.obs ? `<div class="kv"><span class="k">Obs.</span><span class="v">${esc(o.obs)}</span></div>` : ''}
           ${o.checklist && Object.keys(o.checklist).length ? `<div class="row wrap mt">${Object.entries(o.checklist).map(([k, v]) => `<span class="pill ${v === 'ok' ? 'green' : 'red'} xs">${v === 'ok' ? '✓' : '✗'} ${esc(k)}</span>`).join('')}</div>` : ''}
         </div>
@@ -419,12 +453,16 @@ const OSPage = {
           <div class="kv"><span class="k">Total do cliente</span><span class="v gold" style="font-size:20px">${money(Store.osTotal(o))}</span></div>
           <div class="kv"><span class="k">Lucro bruto</span><span class="v green">${money(Store.osTotal(o) - custo)}</span></div>
         </div>
+        ${this.link(o) && !o.deleted ? `<div class="card mb row between wrap"><div class="grow"><b>${icon('eye', 'sm')} Link de acompanhamento</b><div class="xs muted ellipsis">${esc(this.link(o))}</div></div>
+          <div class="row"><button class="btn sm" onclick="OSPage.copiarLink('${o.id}')">Copiar</button>${c.telefone ? `<button class="btn sm success" onclick="OSPage.abrirWhats('${o.id}','status')">${icon('whatsapp', 'sm')} Enviar</button>` : ''}</div></div>` : ''}
+        ${['concluido', 'pago'].includes(o.status) ? `<div class="card mb row between wrap"><div><b>${icon('shieldCheck', 'sm')} Garantia em PDF</b><div class="xs muted">3 meses · até ${fmtDate(Store.garantiaFim(o))}</div></div>
+          <div class="row"><button class="btn sm" onclick="OSPage.pdfGarantia('${o.id}')">${icon('download', 'sm')} Baixar</button><button class="btn sm primary" onclick="OSPage.pdfGarantia('${o.id}', true)">${icon('upload', 'sm')} Compartilhar</button></div></div>` : ''}
         <details class="card"><summary class="bold" style="cursor:pointer">${icon('history', 'sm')} Histórico</summary><div class="timeline mt">${(o.historico || []).slice().reverse().map(h => `<div class="ev"><b>${OS_STATUS[h.status]?.label || h.status}</b> <span class="muted">· ${fmtDateTime(h.data)}</span>${h.nota ? `<div class="xs muted">${esc(h.nota)}</div>` : ''}</div>`).join('')}</div></details>`,
       foot: o.deleted
         ? `<button class="btn outline-gold" onclick="OSPage.restaurar('${o.id}')">${icon('undo')} Restaurar</button><button class="btn danger" onclick="OSPage.excluirDef('${o.id}')">${icon('trash')} Excluir definitivamente</button>`
         : `${o.status !== 'pago' ? `<button class="btn primary" onclick="OSPage.pagamento(Store.osById('${o.id}'))">${icon('dollar')} Receber</button>` : `<button class="btn primary" onclick="OSPage.garantiaModal(Store.osById('${o.id}'))">${icon('shieldCheck')} Garantia</button>`}
           <button class="btn" onclick="Print.os(Store.osById('${o.id}'))">${icon('printer')} Imprimir</button>
-          ${c.telefone ? `<a class="btn success" target="_blank" href="${waLink(c.telefone, o.status === 'concluido' ? this.msgPronto(o, c) : this.msgStatus(o, c))}">${icon('whatsapp')} WhatsApp</a>` : ''}
+          ${c.telefone ? `<button class="btn success" onclick="OSPage.abrirWhats('${o.id}','${o.status === 'concluido' ? 'pronto' : 'status'}')">${icon('whatsapp')} WhatsApp</button>` : ''}
           <button class="btn" onclick="OSPage.editar('${o.id}')">${icon('edit')} Editar</button>
           <button class="btn" onclick="OSPage.assinaturaCliente('${o.id}')">${icon('pen')} Assinatura</button>
           <button class="btn danger" onclick="OSPage.excluir('${o.id}')">${icon('trash')}</button>`,

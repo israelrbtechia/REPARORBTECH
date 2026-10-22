@@ -7,7 +7,7 @@ Pages.posvenda = {
     const os = Store.db.os.filter(o => !o.deleted);
     const hoje = new Date();
     const follow = os.filter(o => o.status === 'pago' && !o.posVenda && o.pagoEm && daysBetween(o.pagoEm, hoje) >= 2 && daysBetween(o.pagoEm, hoje) <= 30);
-    const garantias = os.filter(o => o.status === 'pago' && o.pagoEm && (() => { const fim = addDays(o.pagoEm, o.garantiaDias ?? s.garantiaDias); const d = daysBetween(hoje, fim); return d >= 0 && d <= 10; })());
+    const garantias = os.filter(o => ['concluido', 'pago'].includes(o.status) && Store.garantiaFim(o) && (() => { const d = daysBetween(hoje, Store.garantiaFim(o)); return d >= 0 && d <= 10; })());
     const paradas = os.filter(o => o.status === 'concluido' && daysBetween(o.concluidoEm || o.criadoEm, hoje) >= 3);
     const mes = pad(hoje.getMonth() + 1);
     const aniver = Store.clientesAtivos().filter(c => c.nascimento && c.nascimento.slice(5, 7) === mes).sort((a, b) => a.nascimento.slice(8).localeCompare(b.nascimento.slice(8)));
@@ -19,7 +19,7 @@ Pages.posvenda = {
     let list = '';
     if (this.tab === 'followup') list = follow.map(o => { const c = Store.cliente(o.clienteId); return row(c, c?.nome, `OS #${o.numero} · ${esc(o.aparelho?.modelo)} · pago há ${daysBetween(o.pagoEm, hoje)} dias`, `Olá ${nome(c)}! Aqui é da ${s.loja} 😊\n\nPassando para saber como está seu *${o.aparelho?.modelo}* depois do serviço. Ficou tudo certinho?\n\n${s.googleReview ? `Se puder, deixe sua avaliação, ajuda muito a gente: ${s.googleReview}` : 'Qualquer coisa estamos à disposição!'}`, `<button class="btn sm" onclick="Pages.posvenda.feito('${o.id}')">${icon('check', 'sm')}</button>`); }).join('');
     if (this.tab === 'retirada') list = paradas.map(o => { const c = Store.cliente(o.clienteId); return row(c, c?.nome, `OS #${o.numero} · ${esc(o.aparelho?.modelo)} · pronto há ${daysBetween(o.concluidoEm || o.criadoEm, hoje)} dias · ${money(Store.osTotal(o))}`, OSPage.msgPronto(o, c)); }).join('');
-    if (this.tab === 'garantia') list = garantias.map(o => { const c = Store.cliente(o.clienteId); const fim = addDays(o.pagoEm, o.garantiaDias ?? s.garantiaDias); return row(c, c?.nome, `OS #${o.numero} · garantia até ${fmtDate(fim)}`, `Olá ${nome(c)}! Aqui é da ${s.loja}.\n\nA garantia do serviço no seu *${o.aparelho?.modelo}* vence em ${fmtDate(fim)}. Está tudo funcionando bem? Se notar algo, traga para avaliarmos sem custo antes do vencimento!`); }).join('');
+    if (this.tab === 'garantia') list = garantias.map(o => { const c = Store.cliente(o.clienteId); const fim = Store.garantiaFim(o); return row(c, c?.nome, `OS #${o.numero} · garantia até ${fmtDate(fim)}`, `Olá ${nome(c)}! Aqui é da ${s.loja}.\n\nA garantia do serviço no seu *${o.aparelho?.modelo}* vence em ${fmtDate(fim)}. Está tudo funcionando bem? Se notar algo, traga para avaliarmos sem custo antes do vencimento!`); }).join('');
     if (this.tab === 'aniver') list = aniver.map(c => row(c, c.nome, `🎂 ${c.nascimento.slice(8)}/${mes}`, `Feliz aniversário, ${nome(c)}! 🎉🎂\n\nA equipe ${s.loja} deseja muitas felicidades! Como presente, você tem *10% de desconto* em qualquer serviço ou acessório este mês.`)).join('');
 
     main.innerHTML = `
@@ -43,22 +43,22 @@ Pages.servicos = {
       <div class="card mb" style="padding:12px"><div class="input-icon">${icon('search')}<input class="input" id="sv-q" placeholder="Buscar serviço..." value="${esc(this.q)}"></div></div>
       <div class="card pad-0">${list.map(s => {
         const n = Store.db.os.filter(o => !o.deleted && o.servico === s.nome).length;
-        return `<div class="item" onclick="Pages.servicos.editar('${s.id}')"><div class="row"><div class="grow"><b>${esc(s.nome)}</b><div class="small muted">${esc(s.categoria || '')} · garantia ${s.garantiaDias ?? Store.s.garantiaDias} dias · ${n} OS</div></div><div class="price">${money(s.preco)}</div></div></div>`;
+        return `<div class="item" onclick="Pages.servicos.editar('${s.id}')"><div class="row"><div class="grow"><b>${esc(s.nome)}</b><div class="small muted">${esc(s.categoria || '')} · garantia 3 meses · ${n} OS</div></div><div class="price">${money(s.preco)}</div></div></div>`;
       }).join('') || `<div class="empty">${icon('wrench')}<div>Nenhum serviço cadastrado.</div></div>`}</div>`;
     const q = $('#sv-q'); q.oninput = e => { this.q = e.target.value; App.refresh(); setTimeout(() => { const n = $('#sv-q'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); };
   },
   editar(id) {
-    const s = id ? { ...Store.db.servicos.find(x => x.id === id) } : { garantiaDias: Store.s.garantiaDias };
+    const s = id ? { ...Store.db.servicos.find(x => x.id === id) } : {};
     openModal({
       title: id ? 'Editar serviço' : 'Novo serviço', icon: 'wrench',
       body: `${field('Nome', `<input class="input" id="s-n" placeholder="Ex: Troca de tela iPhone 11" value="${esc(s.nome || '')}">`, { req: true })}
-        <div class="form-row">${field('Preço (R$)', `<input class="input" id="s-p" inputmode="decimal" value="${s.preco ? moneyInput(s.preco) : ''}">`)}${field('Garantia (dias)', `<input class="input" type="number" id="s-g" value="${s.garantiaDias ?? ''}">`)}</div>
+        <div class="form-row">${field('Preço (R$)', `<input class="input" id="s-p" inputmode="decimal" value="${s.preco ? moneyInput(s.preco) : ''}">`)}<div class="field"><label>Garantia</label><div class="input" style="display:flex;align-items:center;color:var(--gold);font-weight:700">3 meses</div></div></div>
         ${field('Categoria', `<input class="input" id="s-c" placeholder="Ex: Tela, Bateria, Software" value="${esc(s.categoria || '')}">`, { opt: true })}`,
       foot: `${id ? `<button class="btn danger" id="s-del">${icon('trash')}</button>` : ''}<button class="btn" data-close>Cancelar</button><button class="btn primary" id="s-ok">${icon('check')} Salvar</button>`,
       onMount: (el, m) => {
         $('#s-ok', el).onclick = () => {
           const nome = $('#s-n', el).value.trim(); if (!nome) return toast('Informe o nome', true);
-          Object.assign(s, { nome, preco: parseMoney($('#s-p', el).value), garantiaDias: parseInt($('#s-g', el).value) || 0, categoria: $('#s-c', el).value.trim() });
+          Object.assign(s, { nome, preco: parseMoney($('#s-p', el).value), categoria: $('#s-c', el).value.trim() });
           if (!id) { s.id = uid(); Store.db.servicos.push(s); } else Store.db.servicos[Store.db.servicos.findIndex(x => x.id === id)] = s;
           Store.save(); m.close(); App.refresh(); toast('Serviço salvo');
         };
@@ -68,7 +68,7 @@ Pages.servicos = {
   },
   exemplos() {
     [['Troca de tela', 350, 'Tela'], ['Troca de bateria', 180, 'Bateria'], ['Troca de conector de carga', 150, 'Carga'], ['Reparo flex de carga', 150, 'Carga'], ['Troca de vidro traseiro', 250, 'Carcaça'], ['Troca de câmera traseira', 280, 'Câmera'], ['Limpeza de oxidação', 120, 'Placa'], ['Reparo de placa', 400, 'Placa'], ['Atualização / formatação', 80, 'Software'], ['Desbloqueio de conta', 150, 'Software'], ['Troca de alto-falante', 120, 'Áudio'], ['Troca de botão power/volume', 130, 'Botões']]
-      .forEach(([nome, preco, categoria]) => Store.db.servicos.push({ id: uid(), nome, preco, categoria, garantiaDias: Store.s.garantiaDias }));
+      .forEach(([nome, preco, categoria]) => Store.db.servicos.push({ id: uid(), nome, preco, categoria }));
     Store.save(); App.refresh(); toast('Exemplos carregados — ajuste os preços!');
   },
 };
@@ -141,8 +141,10 @@ Pages.config = {
         <p class="small muted" style="margin-top:-6px">Meta diária calculada: <b class="gold">${money(Store.metaDiaria())}</b></p>
         <div class="form-row">${field('Taxa débito (%)', `<input class="input" name="taxaDebito" inputmode="decimal" value="${String(s.taxaDebito).replace('.', ',')}">`)}${field('Taxa crédito (%)', `<input class="input" name="taxaCredito" inputmode="decimal" value="${String(s.taxaCredito).replace('.', ',')}">`)}</div>
         <h3 class="mt">${icon('shieldCheck', 'sm')} Garantia e <span class="gold">termos</span></h3>
-        ${field('Garantia padrão (dias)', `<input class="input" type="number" name="garantiaDias" value="${s.garantiaDias}">`)}
-        ${field('Termos da garantia', `<textarea class="input" name="termosGarantia">${esc(s.termosGarantia)}</textarea>`)}
+        <div class="grid grid-2 mb"><div class="stat"><div class="label">Reparos</div><div class="value gold">3 meses</div><div class="sub">sempre, a partir da conclusão</div></div>
+          <div class="stat"><div class="label">Seminovos</div><div class="value gold">6 meses</div><div class="sub">sempre, a partir da venda</div></div></div>
+        ${field('Termos da garantia de reparos', `<textarea class="input" name="termosGarantia">${esc(s.termosGarantia)}</textarea>`)}
+        ${field('Termos da garantia de aparelhos seminovos', `<textarea class="input" name="termosGarantiaSeminovo">${esc(s.termosGarantiaSeminovo || '')}</textarea>`)}
         ${field('Termos da OS de entrada', `<textarea class="input" name="termosEntrada">${esc(s.termosEntrada)}</textarea>`)}
         <button class="btn primary block" id="cf-save">${icon('check')} Salvar configurações</button>
       </div>
@@ -160,6 +162,12 @@ Pages.config = {
         <h3>${icon('users', 'sm')} Como o cliente <span class="gold">conheceu a loja</span></h3>
         <div class="row wrap mb" id="cf-orig">${s.origens.map((o, i) => `<span class="pill">${esc(o)} <button class="icon-btn" style="width:20px;height:20px" data-ro="${i}">${icon('x', 'sm')}</button></span>`).join('')}</div>
         <div class="row"><input class="input" id="cf-onome" placeholder="Nova opção"><button class="btn outline-gold" id="cf-oadd">${icon('plus')}</button></div>
+      </div>
+
+      <div class="card mb">
+        <h3>${icon('upload', 'sm')} Importar do <span class="gold">sistema antigo</span></h3>
+        <p class="small muted" style="margin-top:0">Envie o <b>Dossiê de auditoria (CSV)</b> exportado do sistema anterior. Importa clientes, OS em aberto, vendas, estoque e serviços — sem duplicar o que já existe.</p>
+        <label class="btn outline-gold block">${icon('upload')} Escolher arquivo do dossiê (.csv)<input type="file" accept=".csv,text/csv" id="cf-dossie" hidden></label>
       </div>
 
       <div class="card mb">
@@ -201,7 +209,7 @@ Pages.config = {
 
     $('#cf-save').onclick = () => {
       const f = readForm($('#cf-loja'));
-      Object.assign(s, f, { metaMensal: parseMoney(f.metaMensal), diasTrabalho: parseInt(f.diasTrabalho) || 26, taxaDebito: parseMoney(f.taxaDebito), taxaCredito: parseMoney(f.taxaCredito), garantiaDias: parseInt(f.garantiaDias) || 0 });
+      Object.assign(s, f, { metaMensal: parseMoney(f.metaMensal), diasTrabalho: parseInt(f.diasTrabalho) || 26, taxaDebito: parseMoney(f.taxaDebito), taxaCredito: parseMoney(f.taxaCredito) });
       Store.save(); toast('Configurações salvas'); $('.shell')?.remove(); App.render();
     };
     const renderTecs = () => {
@@ -215,7 +223,42 @@ Pages.config = {
     $$('[data-ro]').forEach(b => b.onclick = () => { s.origens.splice(+b.dataset.ro, 1); Store.save(); App.refresh(); });
     $('#cf-oadd').onclick = () => { const n = $('#cf-onome').value.trim(); if (!n) return; s.origens.push(n); Store.save(); App.refresh(); };
     $('#cf-restore').onchange = e => this.restaurar(e.target.files[0]);
+    $('#cf-dossie').onchange = e => { this.importarDossie(e.target.files[0]); e.target.value = ''; };
     if ($('#cf-membros')) this.renderMembros();
+  },
+
+  importarDossie(file) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      let r;
+      try { r = Dossie.analisar(rd.result); } catch (e) { return toast('Não foi possível ler o dossiê: ' + e.message, true); }
+      const vendasTotal = r.vendas.reduce((s, v) => s + v.total, 0);
+      const maxOS = Math.max(0, ...r.os.map(o => o.numero), ...Store.db.os.map(o => o.numero));
+      const linha = (k, l, n, sub) => `<label class="check" style="border-bottom:1px dashed var(--line)"><input type="checkbox" name="${k}" ${n ? 'checked' : 'disabled'}> <span class="grow"><b>${l}</b> <span class="gold">${n}</span>${sub ? `<br><span class="xs muted">${sub}</span>` : ''}</span></label>`;
+      openModal({
+        title: 'Importar dossiê', icon: 'upload', subtitle: file.name,
+        body: `<div class="info-box">${icon('info')}<span>O dossiê é um relatório: não traz telefones, CPF nem o histórico completo de OS. Os clientes entram só com o nome — complete os dados quando eles voltarem.</span></div>
+          <div id="im-opts">
+          ${linha('clientes', 'Clientes', r.clientes.size, 'Nomes encontrados no relatório')}
+          ${linha('os', 'OS em aberto', r.os.length, r.os.map(o => '#' + o.numero).join(', '))}
+          ${linha('vendas', 'Vendas do período', r.vendas.length, `${money(vendasTotal)} · ${r.vendas.filter(v => v.seminovo).length} aparelho(s) com garantia de 6 meses`)}
+          <label class="check" style="padding-left:30px"><input type="checkbox" name="financeiro" checked> <span class="small">Lançar essas vendas no financeiro</span></label>
+          ${linha('estoque', 'Estoque', r.produtos.length + r.pecas.length, `${r.produtos.length} produtos e ${r.pecas.length} peças (custo calculado; confira os preços de venda)`)}
+          ${linha('servicos', 'Serviços', r.servicos.length, 'Preço = média cobrada no período')}
+          </div>
+          ${field('Próximo número de OS', `<input class="input" type="number" id="im-prox" value="${Math.max(maxOS + 1, Store.db.seq.os || 1)}">`)}
+          <p class="xs muted" style="margin-top:-6px">Se a última OS do sistema antigo foi a #355, coloque 356.</p>`,
+        foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="im-ok">${icon('check')} Importar</button>`,
+        onMount: (el, m) => $('#im-ok', el).onclick = () => {
+          const opt = readForm($('#im-opts', el)); opt.proximaOS = parseInt($('#im-prox', el).value) || 0;
+          const n = Dossie.importar(r, opt);
+          m.close(); App.refresh();
+          toast(`Importado: ${n.clientes} clientes, ${n.os} OS, ${n.vendas} vendas, ${n.produtos + n.pecas} itens de estoque, ${n.servicos} serviços`);
+        },
+      });
+    };
+    rd.readAsText(file, 'utf-8');
   },
 
   async renderMembros() {

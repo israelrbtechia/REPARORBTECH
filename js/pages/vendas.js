@@ -39,7 +39,7 @@ const VendasPage = {
         <div class="small muted">Custo ${money(custo)} · Lucro <b class="green">${money(venda - custo)} (${venda ? Math.round((venda - custo) / venda * 100) : 0}%)</b></div></div></div></div>
       <div class="row mb"><div class="input-icon grow">${icon('search')}<input class="input" id="vd-q" placeholder="Buscar produto ou código..." value="${esc(this.st.q)}"></div></div>
       <div class="row wrap mb">
-        <select class="input" id="vd-cat" style="width:auto;min-height:46px"><option value="">Todas as categorias</option>${selectOpts([...new Set(Store.db.produtos.filter(p => !p.deleted).map(p => p.categoria).filter(Boolean))], this.st.cat)}</select>
+        <select class="input" id="vd-cat" style="width:auto;min-height:46px"><option value="">Todas as categorias</option><option value="__semi" ${this.st.cat === '__semi' ? 'selected' : ''}>Aparelhos seminovos</option>${selectOpts([...new Set(Store.db.produtos.filter(p => !p.deleted).map(p => p.categoria).filter(Boolean))], this.st.cat)}</select>
         <button class="btn" title="Venda avulsa" onclick="VendasPage.avulso()">${icon('repeat')} Avulso</button>
         <button class="btn" onclick="EstoquePage.lote('produto')">${icon('layers')}</button>
         <button class="btn primary" onclick="EstoquePage.editar('produto')">${icon('plus')} Novo Produto</button>
@@ -52,12 +52,14 @@ const VendasPage = {
 
   renderProdutos() {
     const g = $('#vd-grid'); if (!g) return;
-    const list = Store.db.produtos.filter(p => !p.deleted && (!this.st.cat || p.categoria === this.st.cat) && matches(this.st.q, p.nome, p.codigo, p.categoria)).sort((a, b) => a.nome.localeCompare(b.nome));
+    const cat = this.st.cat;
+    const list = Store.db.produtos.filter(p => !p.deleted && (!cat || (cat === '__semi' ? p.seminovo : p.categoria === cat)) && matches(this.st.q, p.nome, p.codigo, p.categoria, p.imei)).sort((a, b) => a.nome.localeCompare(b.nome));
     g.innerHTML = list.map(p => {
       const inCart = this.cart.find(c => c.id === p.id)?.qtd || 0;
       return `<div class="prod-card" onclick="VendasPage.add('${p.id}')" style="${inCart ? 'border-color:var(--gold)' : ''}">
         <div class="row between"><span class="xs muted ellipsis">${esc(p.categoria || '')}</span><button class="icon-btn" style="width:30px;height:30px" onclick="event.stopPropagation();EstoquePage.editar('produto','${p.id}')">${icon('edit', 'sm')}</button></div>
         <b style="line-height:1.25">${esc(p.nome)}</b>
+        ${p.seminovo ? `<div class="row wrap" style="gap:4px"><span class="pill gold xs">Seminovo · 6 meses</span>${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei ? `<div class="xs muted ellipsis">IMEI ${esc(p.imei)}</div>` : ''}` : ''}
         <div class="gold bold" style="font-size:18px">${money(p.preco)}</div>
         <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span>${inCart ? `<span class="pill gold xs">${inCart} no carrinho</span>` : ''}</div>
       </div>`;
@@ -75,7 +77,7 @@ const VendasPage = {
     const p = Store.produto(id);
     const it = this.cart.find(c => c.id === id);
     if ((it?.qtd || 0) + 1 > p.qtd) toast(`Atenção: estoque de "${p.nome}" é ${p.qtd}`, true);
-    if (it) it.qtd++; else this.cart.push({ id, nome: p.nome, preco: p.preco || 0, custo: p.custo || 0, qtd: 1, garantiaDias: p.garantiaDias ?? 90 });
+    if (it) it.qtd++; else this.cart.push({ id, nome: p.nome, preco: p.preco || 0, custo: p.custo || 0, qtd: 1, seminovo: !!p.seminovo, imei: p.imei || '', cor: p.cor || '', garantiaDias: p.seminovo ? GARANTIA_SEMINOVO_DIAS : (p.garantiaDias ?? 90) });
     this.renderProdutos();
     toast(`${p.nome} adicionado`);
   },
@@ -102,6 +104,7 @@ const VendasPage = {
       body: `<div id="ck-items"></div>
         <div class="form-row mt">${field('Desconto (R$)', '<input class="input" id="ck-desc" inputmode="decimal" placeholder="0,00">')}${field('Forma de pagamento', `<select class="input" id="ck-forma">${selectOpts(FORMAS_PGTO, 'pix')}</select>`)}</div>
         ${field('Cliente', `<select class="input" id="ck-cli"><option value="">Consumidor final</option>${clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select>`, { opt: true })}
+        <div id="ck-semi"></div>
         <div class="card center" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)"><div class="small muted">Total</div><div class="gold bold" style="font-size:32px" id="ck-total"></div><div class="xs muted" id="ck-lucro"></div></div>`,
       foot: `<button class="btn danger" id="ck-clear">${icon('trash')} Limpar</button><button class="btn primary" id="ck-ok" style="flex:2">${icon('check')} Confirmar venda</button>`,
       onMount: (el, m) => {
@@ -114,8 +117,13 @@ const VendasPage = {
           return { sub, desc, custo };
         };
         const items = () => {
-          $('#ck-items', el).innerHTML = this.cart.map((c, i) => `<div class="cart-line"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${money(c.preco)} un.</div></div>
-            <div class="qty"><button data-d="-1" data-i="${i}">−</button><span>${c.qtd}</span><button data-d="1" data-i="${i}">+</button></div><b style="min-width:80px;text-align:right">${money(c.preco * c.qtd)}</b></div>`).join('');
+          const semi = this.cart.some(c => c.seminovo);
+          $('#ck-semi', el).innerHTML = semi ? `<div class="info-box">${icon('shieldCheck')}<span>Aparelho seminovo: <b>garantia de 6 meses</b>. O termo em PDF é gerado ao confirmar a venda.</span></div>
+            ${field('Nome do comprador (se não cadastrado)', '<input class="input" id="ck-nome" placeholder="Nome completo">', { opt: true })}` : '';
+          $('#ck-items', el).innerHTML = this.cart.map((c, i) => `<div class="cart-line" style="flex-wrap:wrap"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${money(c.preco)} un.${c.seminovo ? ' · <span class="gold">garantia 6 meses</span>' : ''}</div></div>
+            <div class="qty"><button data-d="-1" data-i="${i}">−</button><span>${c.qtd}</span><button data-d="1" data-i="${i}">+</button></div><b style="min-width:80px;text-align:right">${money(c.preco * c.qtd)}</b>
+            ${c.seminovo ? `<input class="input" data-imei="${i}" placeholder="IMEI do aparelho" value="${esc(c.imei)}" style="flex-basis:100%;min-height:40px;padding:8px 12px;font-family:ui-monospace,monospace">` : ''}</div>`).join('');
+          $$('[data-imei]', el).forEach(inp => inp.oninput = () => { this.cart[+inp.dataset.imei].imei = inp.value.trim(); });
           $$('[data-d]', el).forEach(b => b.onclick = () => { const c = this.cart[+b.dataset.i]; c.qtd += +b.dataset.d; if (c.qtd <= 0) this.cart.splice(+b.dataset.i, 1); if (!this.cart.length) { m.close(); this.renderProdutos(); return; } items(); this.renderProdutos(); });
           calc();
         };
@@ -126,7 +134,7 @@ const VendasPage = {
           if (Store.s.exigirCaixa && !Store.caixaAberto()) return toast('Abra o caixa antes de vender', true);
           const { sub, desc, custo } = calc();
           if (desc > sub) return toast('Desconto maior que o total', true);
-          const v = { id: uid(), numero: Store.next('venda'), data: nowISO(), itens: this.cart.map(c => ({ ...c })), subtotal: sub, desconto: desc, total: sub - desc, custo, forma: $('#ck-forma', el).value, clienteId: $('#ck-cli', el).value || null, garantiaDias: Math.max(0, ...this.cart.map(c => c.garantiaDias || 0)) };
+          const v = { id: uid(), numero: Store.next('venda'), data: nowISO(), itens: this.cart.map(c => ({ ...c })), subtotal: sub, desconto: desc, total: sub - desc, custo, forma: $('#ck-forma', el).value, clienteId: $('#ck-cli', el).value || null, clienteNome: $('#ck-nome', el)?.value.trim() || '' };
           v.itens.forEach(i => { if (!i.avulso) { const p = Store.produto(i.id); if (p) Store.movimentar('produto', p, -i.qtd, `Venda #${v.numero}`); } });
           Store.db.vendas.push(v);
           Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero}`, valor: v.total, custo, forma: v.forma, data: v.data });
@@ -142,11 +150,27 @@ const VendasPage = {
     const c = v.clienteId && Store.cliente(v.clienteId);
     openModal({
       title: 'Venda concluída!', icon: 'checkCircle', subtitle: `Venda #${v.numero} · ${money(v.total)}`,
-      body: `<div class="center"><div class="gold bold" style="font-size:34px">${money(v.total)}</div><p class="muted">${FORMAS_PGTO[v.forma]} · ${v.itens.length} item(ns)</p></div>`,
+      body: `<div class="center"><div class="gold bold" style="font-size:34px">${money(v.total)}</div><p class="muted">${FORMAS_PGTO[v.forma]} · ${v.itens.length} item(ns)</p></div>${this.garantiasHTML(v)}`,
       foot: `<button class="btn primary" onclick="Print.venda(Store.db.vendas.find(x=>x.id==='${v.id}'))">${icon('printer')} Recibo</button>
         ${c?.telefone ? `<a class="btn success" target="_blank" href="${waLink(c.telefone, `Olá ${c.nome.split(' ')[0]}! Obrigado pela compra na ${Store.s.loja}! 🛍️\n\n${v.itens.map(i => `• ${i.nome} x${i.qtd}: ${money(i.preco * i.qtd)}`).join('\n')}\n\n*Total: ${money(v.total)}*`)}">${icon('whatsapp')} WhatsApp</a>` : ''}
         <button class="btn" data-close>Fechar</button>`,
     });
+  },
+
+  // Termos de garantia (PDF) dos aparelhos seminovos da venda
+  garantiasHTML(v) {
+    const semi = v.itens.map((it, i) => [it, i]).filter(([it]) => it.seminovo);
+    if (!semi.length || v.cancelada) return '';
+    return `<div class="card mb" style="border-color:rgba(212,175,55,.45)"><b>${icon('shieldCheck', 'sm')} Garantia de <span class="gold">6 meses</span></b>
+      ${semi.map(([it, i]) => `<div class="cart-line"><div class="grow"><b>${esc(it.nome)}</b><div class="xs muted">${it.imei ? 'IMEI ' + esc(it.imei) + ' · ' : ''}até ${fmtDate(addDays(v.data, GARANTIA_SEMINOVO_DIAS))}</div></div>
+        <button class="btn sm" onclick="VendasPage.pdf('${v.id}',${i})">${icon('download', 'sm')}</button><button class="btn sm primary" onclick="VendasPage.pdf('${v.id}',${i},true)">${icon('upload', 'sm')} PDF</button></div>`).join('')}</div>`;
+  },
+  async pdf(id, i, compartilhar) {
+    const v = Store.db.vendas.find(x => x.id === id);
+    toast('Gerando PDF da garantia...');
+    const d = GarantiaDados.venda(v, v.itens[i]);
+    const doc = await Pdf.garantia(d);
+    if (compartilhar) await Pdf.compartilhar(doc, Pdf.nome(d), `Garantia do aparelho — ${Store.s.loja}`); else Pdf.baixar(doc, Pdf.nome(d));
   },
 
   historico(box) {
@@ -168,7 +192,7 @@ const VendasPage = {
     const c = v.clienteId && Store.cliente(v.clienteId);
     openModal({
       title: `Venda #${v.numero}`, subtitle: fmtDateTime(v.data), icon: 'bag',
-      body: `${c ? `<p>Cliente: <b>${esc(c.nome)}</b></p>` : ''}<div class="card">${v.itens.map(i => `<div class="kv"><span class="k">${i.qtd}x ${esc(i.nome)}</span><span class="v">${money(i.preco * i.qtd)}</span></div>`).join('')}
+      body: `${c ? `<p>Cliente: <b>${esc(c.nome)}</b></p>` : v.clienteNome ? `<p>Comprador: <b>${esc(v.clienteNome)}</b></p>` : ''}${this.garantiasHTML(v)}<div class="card">${v.itens.map(i => `<div class="kv"><span class="k">${i.qtd}x ${esc(i.nome)}</span><span class="v">${money(i.preco * i.qtd)}</span></div>`).join('')}
         ${v.desconto ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(v.desconto)}</span></div>` : ''}
         <div class="kv"><span class="k bold">Total · ${FORMAS_PGTO[v.forma]}</span><span class="v gold" style="font-size:20px">${money(v.total)}</span></div></div>`,
       foot: `<button class="btn primary" onclick="Print.venda(Store.db.vendas.find(x=>x.id==='${v.id}'))">${icon('printer')} Recibo</button>

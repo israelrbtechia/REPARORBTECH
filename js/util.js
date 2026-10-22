@@ -23,11 +23,13 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const nowISO = () => new Date().toISOString();
 const pad = n => String(n).padStart(2, '0');
 function dayKey(d = new Date()) {
-  d = new Date(d);
+  d = toDate(d);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 const monthKey = (d = new Date()) => dayKey(d).slice(0, 7);
-function fmtDate(d) { if (!d) return '—'; d = new Date(d); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
+// "2026-10-24" (só data) é lido no fuso local, senão vira o dia anterior no Brasil
+const toDate = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + 'T12:00:00') : new Date(d);
+function fmtDate(d) { if (!d) return '—'; d = toDate(d); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
 function fmtDateTime(d) { if (!d) return '—'; d = new Date(d); return `${fmtDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function daysBetween(a, b) { return Math.floor((new Date(dayKey(b)) - new Date(dayKey(a))) / 86400000); }

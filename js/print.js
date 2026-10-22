@@ -93,31 +93,6 @@ const Print = {
     this.run(via('Via da loja') + '<div class="cut"></div>' + via('Via do cliente'));
   },
 
-  garantia(o, tecnicoId) {
-    const c = Store.cliente(o.clienteId);
-    const s = Store.s;
-    const tec = s.tecnicos.find(t => t.id === (tecnicoId || o.tecnicoId));
-    const dias = Number(o.garantiaDias ?? s.garantiaDias) || 0;
-    const ini = o.entregueEm || o.pagoEm || nowISO();
-    this.run(`
-      ${this.header('Termo de Garantia', o.numero)}
-      <p style="text-align:center;margin:16px 0"><span class="stamp">GARANTIA DE ${dias} DIAS</span></p>
-      ${this.clienteBlock(c)}
-      ${this.aparelhoBlock(o.aparelho)}
-      <h3>Serviço executado</h3>
-      <table><tr><th>Descrição</th><th style="width:120px">Valor</th></tr>
-      <tr><td>${esc(o.servico || o.defeito || 'Serviço')}</td><td>${money(Store.osTotal(o))}</td></tr>
-      ${(o.pecas || []).map(p => `<tr><td>Peça: ${esc(p.nome)} (x${p.qtd})</td><td>incluso</td></tr>`).join('')}</table>
-      <div class="g2" style="margin-top:8px">
-        <div class="pkv"><b>Pagamento:</b> ${esc(FORMAS_PGTO[o.pagamento?.forma] || '—')}</div>
-        <div class="pkv"><b>Pago em:</b> ${fmtDate(o.pagoEm)}</div>
-        <div class="pkv"><b>Garantia de:</b> ${fmtDate(ini)}</div>
-        <div class="pkv"><b>Válida até:</b> <b>${fmtDate(addDays(ini, dias))}</b></div></div>
-      <h3>Condições da garantia</h3><div class="terms">${esc(s.termosGarantia)}</div>
-      <div class="sigs"><div class="sig">${this.sigImg(o.assinaturaCliente)}Cliente — ${esc(c?.nome || '')}</div><div class="sig">${this.sigImg(tec?.assinatura || s.assinaturaDono)}Assinatura do técnico${tec ? ' — ' + esc(tec.nome) : ''}</div></div>
-      <div class="foot">Obrigado pela preferência! ${esc(s.loja)}</div>`);
-  },
-
   orcamento(orc) {
     const c = Store.cliente(orc.clienteId);
     const total = orc.itens.reduce((s, i) => s + i.valor * (i.qtd || 1), 0);
@@ -142,11 +117,11 @@ const Print = {
       ${c ? this.clienteBlock(c) : ''}
       <h3>Produtos</h3>
       <table><tr><th>Produto</th><th style="width:50px">Qtd</th><th style="width:100px">Unit.</th><th style="width:100px">Total</th></tr>
-      ${v.itens.map(i => `<tr><td>${esc(i.nome)}</td><td>${i.qtd}</td><td>${money(i.preco)}</td><td>${money(i.preco * i.qtd)}</td></tr>`).join('')}</table>
+      ${v.itens.map(i => `<tr><td>${esc(i.nome)}${i.imei ? `<br><small>IMEI ${esc(i.imei)}</small>` : ''}</td><td>${i.qtd}</td><td>${money(i.preco)}</td><td>${money(i.preco * i.qtd)}</td></tr>`).join('')}</table>
       ${v.desconto ? `<div class="right" style="margin-top:6px">Desconto: -${money(v.desconto)}</div>` : ''}
       <div class="total">Total: ${money(v.total)}</div>
       <p><b>Pagamento:</b> ${esc(FORMAS_PGTO[v.forma] || v.forma)} · <b>Data:</b> ${fmtDateTime(v.data)}</p>
-      ${v.garantiaDias ? `<p><b>Garantia:</b> ${v.garantiaDias} dias (até ${fmtDate(addDays(v.data, v.garantiaDias))})</p>` : ''}
+      ${v.itens.filter(i => i.garantiaDias).map(i => `<p><b>Garantia ${esc(i.nome)}:</b> ${i.garantiaDias >= 180 ? '6 meses' : i.garantiaDias + ' dias'} (até ${fmtDate(addDays(v.data, i.garantiaDias))})${i.imei ? ' · IMEI ' + esc(i.imei) : ''}</p>`).join('')}
       <div class="foot">Obrigado pela preferência! ${esc(Store.s.loja)}</div>`);
   },
 

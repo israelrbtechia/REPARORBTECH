@@ -10,6 +10,9 @@ const OS_STATUS = {
   interrompido: { label: 'Interrompido',  icon: 'xCircle',     color: '#f87171', pill: 'red' },
 };
 const OS_ATIVOS = ['analise', 'peca', 'servico', 'concluido'];
+// Garantias fixas da loja
+const GARANTIA_REPARO_DIAS = 90;    // reparos: sempre 3 meses
+const GARANTIA_SEMINOVO_DIAS = 180; // aparelhos seminovos: sempre 6 meses
 const FORMAS_PGTO = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Cartão de Débito', credito: 'Cartão de Crédito', transferencia: 'Transferência', outro: 'Outro' };
 const TIPOS_APARELHO = [
   ['celular', 'Celular', 'phone'], ['tablet', 'Tablet', 'tablet'], ['notebook', 'Notebook', 'laptop'], ['computador', 'Computador', 'monitor'],
@@ -32,6 +35,7 @@ function defaultDB() {
       diasTrabalho: 26,
       garantiaDias: 90,
       termosGarantia: 'A garantia cobre exclusivamente o serviço executado e as peças substituídas descritas nesta ordem. Não cobre: danos por queda, contato com líquidos, mau uso, aparelho aberto por terceiros, lacre de garantia violado ou danos na tela causados após a entrega.',
+      termosGarantiaSeminovo: 'Garantia de 6 meses contra defeitos de funcionamento do aparelho (placa, tela, bateria, câmeras, áudio e conectores), contados a partir da data da compra. Não cobre: quedas, trincas, contato com líquidos, mau uso, desgaste natural de bateria acima do esperado por uso intenso, aparelho aberto por terceiros, bloqueios por conta (iCloud/Google) feitos pelo comprador ou danos causados por acessórios não originais.',
       termosEntrada: 'Aparelhos não retirados em até 90 dias após a comunicação de conclusão serão considerados abandonados. A loja não se responsabiliza por dados, chips e cartões de memória deixados no aparelho.',
       taxaDebito: 1.5,
       taxaCredito: 3.5,
@@ -134,6 +138,21 @@ const Store = {
     this.log('Status OS', `#${o.numero}: ${OS_STATUS[antes]?.label} → ${OS_STATUS[status].label}`);
     this.save();
   },
+
+  /* ----- Garantia e acompanhamento ----- */
+  garantiaInicio(o) { return o.concluidoEm || o.pagoEm || o.entregueEm || null; },
+  garantiaFim(o) { const i = this.garantiaInicio(o); return i ? addDays(i, GARANTIA_REPARO_DIAS) : null; },
+  // Token secreto do link público da OS (gerado na primeira vez que o link é usado)
+  tokenOS(o) {
+    if (!o.token) {
+      const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+      const r = crypto.getRandomValues(new Uint8Array(22));
+      o.token = Array.from(r, b => abc[b % abc.length]).join('');
+      this.saveOS(o);
+    }
+    return o.token;
+  },
+  linkOS(o) { return `${location.origin}/acompanhar/${this.tokenOS(o)}`; },
 
   /* ----- Financeiro ----- */
   taxa(forma, valor) {

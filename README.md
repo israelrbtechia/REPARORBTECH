@@ -16,6 +16,14 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 - **Caixa**: abertura, sangria, suprimento e fechamento com conferência.
 - **Relatórios** e **Configurações** (dados da loja, metas, termos, técnicos/assinaturas, backup/restauração).
 
+## Acompanhamento do cliente e garantias
+- **Link de acompanhamento**: ao cadastrar a OS, o botão **Enviar link pelo WhatsApp** manda ao cliente um link (`/acompanhar/<código>`) onde ele vê o status em tempo real, a previsão e o histórico. O link usa um código secreto e mostra só aquela OS (sem telefone, CPF ou IMEI). Requer a nuvem (Supabase) ligada.
+- **Garantia em PDF**: ao marcar a OS como **Concluído**, o app gera o termo de garantia em PDF (baixar ou compartilhar no WhatsApp). O cliente também baixa o PDF pelo link de acompanhamento.
+- **Prazos fixos**: reparos **3 meses** (a partir da conclusão) · aparelhos **seminovos 6 meses** (a partir da venda). Marque o produto como "Aparelho seminovo" para gerar o termo de 6 meses na venda, com IMEI.
+
+## Importar do sistema antigo
+**Configurações → Importar do sistema antigo** lê o *Dossiê de auditoria (CSV)* e importa clientes (só nomes), OS em aberto, vendas do período (opcionalmente no financeiro), estoque e serviços. Não duplica se importado de novo. O dossiê não traz telefones/CPF nem o histórico completo de OS e recebimentos de serviços.
+
 ## Como usar
 Site estático, sem build. Publicação na **Vercel**:
 1. Em vercel.com → **Add New → Project** → importe o repositório `REPARORBTECH`.
@@ -39,6 +47,8 @@ Com o Supabase ligado, os dados ficam na nuvem e sincronizam **em tempo real** e
 3. Em **Project Settings → API**, copie a **Project URL** e a chave **anon public** e cole em [`js/config.js`](js/config.js).
 4. Em **Authentication → URL Configuration**, coloque o endereço do app na Vercel em **Site URL** (ex.: `https://reparorbtech.vercel.app`). É para onde vão os links de confirmação de e-mail e de "esqueci a senha".
 5. Faça o commit/push — a Vercel publica sozinha.
+
+> Atualizou o app? Rode o `supabase/schema.sql` de novo no SQL Editor (é seguro repetir) para criar as funções novas, como a do link de acompanhamento.
 
 No primeiro acesso: **Criar conta → Criar minha loja**. Se o aparelho já tiver dados salvos (modo local), o app oferece enviá-los para a nuvem.
 Funcionários: criam a própria conta no app e entram com o **código de convite** mostrado em **Configurações → Equipe e nuvem**. O dono pode remover funcionários e gerar um novo código.
