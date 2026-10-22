@@ -18,7 +18,7 @@ const FinPage = {
     const r = Store.resumo(inRange);
     const ls = Store.lancs().filter(l => inRange(l) && (!this.st.tipo || l.tipo === this.st.tipo)).sort((a, b) => b.data.localeCompare(a.data));
     const porForma = {};
-    Store.lancs().filter(l => inRange(l) && l.tipo === 'receita').forEach(l => porForma[l.forma] = (porForma[l.forma] || 0) + l.valor);
+    Store.lancs().filter(l => inRange(l) && l.tipo === 'receita' && l.forma !== 'troca').forEach(l => porForma[l.forma] = (porForma[l.forma] || 0) + l.valor);
     const porCat = {};
     Store.lancs().filter(l => inRange(l) && l.tipo === 'despesa').forEach(l => porCat[l.categoria] = (porCat[l.categoria] || 0) + l.valor);
     const aReceber = Store.db.os.filter(o => !o.deleted && OS_ATIVOS.includes(o.status)).reduce((s, o) => s + Store.osTotal(o), 0);
@@ -56,7 +56,7 @@ const FinPage = {
         ${ls.slice(0, 300).map(l => `<div class="item" style="cursor:default;padding:12px 18px"><div class="row">
           <div class="stat-icon"><div class="ic" style="width:38px;height:38px;${l.tipo === 'despesa' ? 'color:var(--red);background:rgba(248,113,113,.1)' : ''}">${icon(l.tipo === 'despesa' ? 'minus' : l.origem === 'venda' ? 'bag' : l.origem === 'os' ? 'wrench' : 'plus', 'sm')}</div></div>
           <div class="grow"><b class="ellipsis" style="display:block">${esc(l.desc)}</b><div class="xs muted">${fmtDateTime(l.data)} · ${nomeForma(l.forma)} · ${esc(l.categoria || '')}</div></div>
-          <div class="right"><b class="${l.tipo === 'despesa' ? 'red' : 'gold'}">${l.tipo === 'despesa' ? '-' : '+'}${money(l.valor)}</b>${l.custo || l.taxa ? `<div class="xs muted">custo ${money((l.custo || 0) + (l.taxa || 0))}</div>` : ''}</div>
+          <div class="right">${l.forma === 'troca' && l.tipo === 'receita' ? `<b class="muted">${money(l.valor)}</b><div class="xs muted">não soma no faturamento</div>` : `<b class="${l.tipo === 'despesa' ? 'red' : 'gold'}">${l.tipo === 'despesa' ? '-' : '+'}${money(l.valor)}</b>${l.custo || l.taxa ? `<div class="xs muted">custo ${money((l.custo || 0) + (l.taxa || 0))}</div>` : ''}`}</div>
           ${l.origem === 'manual' ? `<button class="icon-btn" onclick="FinPage.excluir('${l.id}')">${icon('trash', 'sm')}</button>` : ''}
         </div></div>`).join('') || `<div class="empty">${icon('chart')}<div>Nenhum lançamento no período.</div></div>`}
       </div>`;
@@ -103,7 +103,7 @@ Pages.financeiro = FinPage;
 /* Caixa */
 Pages.caixa = {
   calc(cx) {
-    const ls = Store.db.lancamentos.filter(l => l.caixaId === cx.id);
+    const ls = Store.lancs().filter(l => l.caixaId === cx.id && l.forma !== 'troca');
     const din = ls.filter(l => l.forma === 'dinheiro');
     const r = {
       inicial: cx.valorInicial || 0,

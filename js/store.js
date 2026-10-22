@@ -186,8 +186,10 @@ const Store = {
   },
   resumo(filtro) {
     const ls = this.lancs().filter(filtro);
-    const r = { receita: 0, custo: 0, taxa: 0, despesa: 0, compras: 0, os: 0, vendas: 0, qtd: ls.length };
+    const r = { receita: 0, custo: 0, taxa: 0, despesa: 0, compras: 0, os: 0, vendas: 0, troca: 0, qtd: ls.length };
     for (const l of ls) {
+      // aparelho recebido na troca não é dinheiro: não soma no faturamento, só abate o custo da venda (o lucro continua certo)
+      if (l.tipo === 'receita' && l.forma === 'troca') { r.troca += l.valor; r.custo += (l.custo || 0) - l.valor; continue; }
       if (l.tipo === 'receita') {
         r.receita += l.valor; r.custo += l.custo || 0; r.taxa += l.taxa || 0;
         if (l.origem === 'os') r.os += l.valor; else if (l.origem === 'venda') r.vendas += l.valor;
