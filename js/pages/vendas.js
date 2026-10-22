@@ -1,0 +1,188 @@
+/* Venda de Produtos (PDV) */
+const VendasPage = {
+  st: { tab: 'produtos', q: '', cat: '' },
+  cart: [],
+
+  render(main) {
+    const prods = Store.db.produtos.filter(p => !p.deleted);
+    const baixo = prods.filter(p => p.qtd <= (p.minimo || 0)).length;
+    const venda = prods.reduce((s, p) => s + (p.preco || 0) * Math.max(0, p.qtd), 0);
+    const custo = prods.reduce((s, p) => s + (p.custo || 0) * Math.max(0, p.qtd), 0);
+    const cx = Store.caixaAberto();
+    const cxAntigo = cx && dayKey(cx.abertoEm) !== dayKey();
+    main.innerHTML = `
+      ${pageHead('bag', 'Venda de Produtos', 'Gerencie seu estoque, venda produtos e acompanhe o histórico.')}
+      <div class="row wrap mb">
+        ${cx ? `<span class="pill ${cxAntigo ? 'orange' : 'green'}">● Caixa aberto desde ${fmtDate(cx.abertoEm).slice(0, 5)}</span>${cxAntigo ? `<a class="small" href="#/caixa">Fechar e abrir o de hoje</a>` : ''}` : `<span class="pill red">● Caixa fechado</span><a class="small" href="#/caixa">Abrir caixa</a>`}
+      </div>
+      <div class="tabs mb" id="vd-tabs" style="display:inline-flex">${[['produtos', 'Produtos', 'box'], ['hist', 'Histórico de Vendas', 'history']].map(([k, l, ic]) => `<button data-k="${k}" class="${this.st.tab === k ? 'on' : ''}">${icon(ic, 'sm')} ${l}</button>`).join('')}</div>
+      ${!Store.s.exigirCaixa ? `<div class="card mb row small muted" style="align-items:flex-start">${icon('info')}<span>A exigência de caixa aberto está desligada. Recebimentos feitos com o caixa fechado não entram na conferência do caixa.</span></div>` : ''}
+      <div id="vd-body"></div>
+      <button class="fab" id="vd-fab" onclick="VendasPage.checkout()" title="Carrinho" style="display:${this.cart.length ? 'grid' : 'none'}">${icon('cart')}<span id="vd-count" style="position:absolute;top:-2px;right:-2px;background:#fff;color:#000;border-radius:99px;font-size:12px;font-weight:800;padding:2px 7px">0</span></button>`;
+    $$('#vd-tabs button').forEach(b => b.onclick = () => { this.st.tab = b.dataset.k; $$('#vd-tabs button').forEach(x => x.classList.toggle('on', x === b)); this.body(); });
+    this.stats = { total: prods.length, baixo, venda, custo };
+    this.body();
+  },
+
+  body() {
+    const box = $('#vd-body');
+    if (this.st.tab === 'hist') return this.historico(box);
+    const { total, baixo, venda, custo } = this.stats;
+    box.innerHTML = `
+      <div class="grid grid-2 mb">
+        <div class="stat stat-icon"><div class="ic">${icon('layers')}</div><div><div class="label">Total produtos</div><div class="value">${total} <span class="small muted">itens</span></div></div></div>
+        <div class="stat stat-icon"><div class="ic" style="color:var(--orange);background:rgba(251,146,60,.12)">${icon('alert')}</div><div><div class="label">Baixo estoque</div><div class="value">${baixo} <span class="small muted">itens</span></div></div></div>
+      </div>
+      <div class="hero mb" style="padding:18px"><div class="stat-icon"><div class="ic">${icon('dollar')}</div><div>
+        <div class="label" style="font-size:11.5px;font-weight:700;letter-spacing:.12em;color:var(--muted)">VALOR DE VENDA DO ESTOQUE</div>
+        <div class="value" style="font-size:24px;font-weight:800">${money(venda)}</div>
+        <div class="small muted">Custo ${money(custo)} · Lucro <b class="green">${money(venda - custo)} (${venda ? Math.round((venda - custo) / venda * 100) : 0}%)</b></div></div></div></div>
+      <div class="row mb"><div class="input-icon grow">${icon('search')}<input class="input" id="vd-q" placeholder="Buscar produto ou código..." value="${esc(this.st.q)}"></div></div>
+      <div class="row wrap mb">
+        <select class="input" id="vd-cat" style="width:auto;min-height:46px"><option value="">Todas as categorias</option>${selectOpts([...new Set(Store.db.produtos.filter(p => !p.deleted).map(p => p.categoria).filter(Boolean))], this.st.cat)}</select>
+        <button class="btn" title="Venda avulsa" onclick="VendasPage.avulso()">${icon('repeat')} Avulso</button>
+        <button class="btn" onclick="EstoquePage.lote('produto')">${icon('layers')}</button>
+        <button class="btn primary" onclick="EstoquePage.editar('produto')">${icon('plus')} Novo Produto</button>
+      </div>
+      <div class="grid grid-2" id="vd-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))"></div>`;
+    $('#vd-q').oninput = e => { this.st.q = e.target.value; this.renderProdutos(); };
+    $('#vd-cat').onchange = e => { this.st.cat = e.target.value; this.renderProdutos(); };
+    this.renderProdutos();
+  },
+
+  renderProdutos() {
+    const g = $('#vd-grid'); if (!g) return;
+    const list = Store.db.produtos.filter(p => !p.deleted && (!this.st.cat || p.categoria === this.st.cat) && matches(this.st.q, p.nome, p.codigo, p.categoria)).sort((a, b) => a.nome.localeCompare(b.nome));
+    g.innerHTML = list.map(p => {
+      const inCart = this.cart.find(c => c.id === p.id)?.qtd || 0;
+      return `<div class="prod-card" onclick="VendasPage.add('${p.id}')" style="${inCart ? 'border-color:var(--gold)' : ''}">
+        <div class="row between"><span class="xs muted ellipsis">${esc(p.categoria || '')}</span><button class="icon-btn" style="width:30px;height:30px" onclick="event.stopPropagation();EstoquePage.editar('produto','${p.id}')">${icon('edit', 'sm')}</button></div>
+        <b style="line-height:1.25">${esc(p.nome)}</b>
+        <div class="gold bold" style="font-size:18px">${money(p.preco)}</div>
+        <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span>${inCart ? `<span class="pill gold xs">${inCart} no carrinho</span>` : ''}</div>
+      </div>`;
+    }).join('') || `<div class="empty" style="grid-column:1/-1">${icon('bag')}<div>Nenhum produto. Cadastre em "Novo Produto".</div></div>`;
+    this.updateFab();
+  },
+
+  updateFab() {
+    const n = this.cart.reduce((s, c) => s + c.qtd, 0);
+    const f = $('#vd-fab'); if (!f) return;
+    f.style.display = n ? 'grid' : 'none'; $('#vd-count').textContent = n;
+  },
+
+  add(id) {
+    const p = Store.produto(id);
+    const it = this.cart.find(c => c.id === id);
+    if ((it?.qtd || 0) + 1 > p.qtd) toast(`Atenção: estoque de "${p.nome}" é ${p.qtd}`, true);
+    if (it) it.qtd++; else this.cart.push({ id, nome: p.nome, preco: p.preco || 0, custo: p.custo || 0, qtd: 1, garantiaDias: p.garantiaDias ?? 90 });
+    this.renderProdutos();
+    toast(`${p.nome} adicionado`);
+  },
+
+  avulso() {
+    openModal({
+      title: 'Item avulso', icon: 'repeat', subtitle: 'Venda de algo que não está no cadastro',
+      body: `${field('Descrição', '<input class="input" id="av-n" placeholder="Ex: Película genérica">', { req: true })}<div class="form-row">${field('Preço', '<input class="input" id="av-p" inputmode="decimal" placeholder="0,00">')}${field('Custo', '<input class="input" id="av-c" inputmode="decimal" placeholder="0,00">', { opt: true })}</div>`,
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="av-ok">Adicionar ao carrinho</button>`,
+      onMount: (el, m) => $('#av-ok', el).onclick = () => {
+        const nome = $('#av-n', el).value.trim(); const preco = parseMoney($('#av-p', el).value);
+        if (!nome || !preco) return toast('Informe descrição e preço', true);
+        this.cart.push({ id: 'av-' + uid(), avulso: true, nome, preco, custo: parseMoney($('#av-c', el).value), qtd: 1 });
+        m.close(); this.renderProdutos(); this.checkout();
+      },
+    });
+  },
+
+  checkout() {
+    if (!this.cart.length) return toast('Carrinho vazio', true);
+    const clientes = Store.clientesAtivos();
+    openModal({
+      title: 'Finalizar venda', icon: 'cart',
+      body: `<div id="ck-items"></div>
+        <div class="form-row mt">${field('Desconto (R$)', '<input class="input" id="ck-desc" inputmode="decimal" placeholder="0,00">')}${field('Forma de pagamento', `<select class="input" id="ck-forma">${selectOpts(FORMAS_PGTO, 'pix')}</select>`)}</div>
+        ${field('Cliente', `<select class="input" id="ck-cli"><option value="">Consumidor final</option>${clientes.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select>`, { opt: true })}
+        <div class="card center" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)"><div class="small muted">Total</div><div class="gold bold" style="font-size:32px" id="ck-total"></div><div class="xs muted" id="ck-lucro"></div></div>`,
+      foot: `<button class="btn danger" id="ck-clear">${icon('trash')} Limpar</button><button class="btn primary" id="ck-ok" style="flex:2">${icon('check')} Confirmar venda</button>`,
+      onMount: (el, m) => {
+        const calc = () => {
+          const sub = this.cart.reduce((s, c) => s + c.preco * c.qtd, 0);
+          const desc = parseMoney($('#ck-desc', el).value);
+          const custo = this.cart.reduce((s, c) => s + c.custo * c.qtd, 0);
+          $('#ck-total', el).textContent = money(sub - desc);
+          $('#ck-lucro', el).textContent = `Subtotal ${money(sub)} · lucro estimado ${money(sub - desc - custo)}`;
+          return { sub, desc, custo };
+        };
+        const items = () => {
+          $('#ck-items', el).innerHTML = this.cart.map((c, i) => `<div class="cart-line"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${money(c.preco)} un.</div></div>
+            <div class="qty"><button data-d="-1" data-i="${i}">−</button><span>${c.qtd}</span><button data-d="1" data-i="${i}">+</button></div><b style="min-width:80px;text-align:right">${money(c.preco * c.qtd)}</b></div>`).join('');
+          $$('[data-d]', el).forEach(b => b.onclick = () => { const c = this.cart[+b.dataset.i]; c.qtd += +b.dataset.d; if (c.qtd <= 0) this.cart.splice(+b.dataset.i, 1); if (!this.cart.length) { m.close(); this.renderProdutos(); return; } items(); this.renderProdutos(); });
+          calc();
+        };
+        items();
+        $('#ck-desc', el).oninput = calc;
+        $('#ck-clear', el).onclick = () => { this.cart = []; m.close(); this.renderProdutos(); };
+        $('#ck-ok', el).onclick = () => {
+          if (Store.s.exigirCaixa && !Store.caixaAberto()) return toast('Abra o caixa antes de vender', true);
+          const { sub, desc, custo } = calc();
+          if (desc > sub) return toast('Desconto maior que o total', true);
+          const v = { id: uid(), numero: Store.next('venda'), data: nowISO(), itens: this.cart.map(c => ({ ...c })), subtotal: sub, desconto: desc, total: sub - desc, custo, forma: $('#ck-forma', el).value, clienteId: $('#ck-cli', el).value || null, garantiaDias: Math.max(0, ...this.cart.map(c => c.garantiaDias || 0)) };
+          v.itens.forEach(i => { if (!i.avulso) { const p = Store.produto(i.id); if (p) Store.movimentar('produto', p, -i.qtd, `Venda #${v.numero}`); } });
+          Store.db.vendas.push(v);
+          Store.addReceita({ origem: 'venda', refId: v.id, desc: `Venda #${v.numero}`, valor: v.total, custo, forma: v.forma, data: v.data });
+          Store.log('Venda', `#${v.numero} ${money(v.total)}`);
+          Store.save(); this.cart = []; m.close(); App.refresh();
+          this.recibo(v);
+        };
+      },
+    });
+  },
+
+  recibo(v) {
+    const c = v.clienteId && Store.cliente(v.clienteId);
+    openModal({
+      title: 'Venda concluída!', icon: 'checkCircle', subtitle: `Venda #${v.numero} · ${money(v.total)}`,
+      body: `<div class="center"><div class="gold bold" style="font-size:34px">${money(v.total)}</div><p class="muted">${FORMAS_PGTO[v.forma]} · ${v.itens.length} item(ns)</p></div>`,
+      foot: `<button class="btn primary" onclick="Print.venda(Store.db.vendas.find(x=>x.id==='${v.id}'))">${icon('printer')} Recibo</button>
+        ${c?.telefone ? `<a class="btn success" target="_blank" href="${waLink(c.telefone, `Olá ${c.nome.split(' ')[0]}! Obrigado pela compra na ${Store.s.loja}! 🛍️\n\n${v.itens.map(i => `• ${i.nome} x${i.qtd}: ${money(i.preco * i.qtd)}`).join('\n')}\n\n*Total: ${money(v.total)}*`)}">${icon('whatsapp')} WhatsApp</a>` : ''}
+        <button class="btn" data-close>Fechar</button>`,
+    });
+  },
+
+  historico(box) {
+    const vendas = Store.db.vendas.slice().sort((a, b) => b.data.localeCompare(a.data));
+    const hoje = vendas.filter(v => !v.cancelada && dayKey(v.data) === dayKey());
+    box.innerHTML = `
+      <div class="grid grid-2 mb">
+        <div class="stat"><div class="label">Vendas hoje</div><div class="value">${hoje.length}</div></div>
+        <div class="stat"><div class="label">Total hoje</div><div class="value gold">${money(hoje.reduce((s, v) => s + v.total, 0))}</div></div>
+      </div>
+      <div class="card pad-0">${vendas.slice(0, 200).map(v => `<div class="item" onclick="VendasPage.detalheVenda('${v.id}')"><div class="row between"><div class="grow">
+        <div class="meta"><span class="num">#${v.numero}</span><span>${fmtDateTime(v.data)}</span><span class="pill">${FORMAS_PGTO[v.forma]}</span>${v.cancelada ? '<span class="pill red">Cancelada</span>' : ''}</div>
+        <div class="small muted ellipsis" style="margin-top:6px">${v.itens.map(i => `${i.qtd}x ${esc(i.nome)}`).join(', ')}</div></div>
+        <div class="price" style="${v.cancelada ? 'text-decoration:line-through;opacity:.5' : ''}">${money(v.total)}</div></div></div>`).join('') || `<div class="empty">${icon('history')}<div>Nenhuma venda ainda.</div></div>`}</div>`;
+  },
+
+  detalheVenda(id) {
+    const v = Store.db.vendas.find(x => x.id === id);
+    const c = v.clienteId && Store.cliente(v.clienteId);
+    openModal({
+      title: `Venda #${v.numero}`, subtitle: fmtDateTime(v.data), icon: 'bag',
+      body: `${c ? `<p>Cliente: <b>${esc(c.nome)}</b></p>` : ''}<div class="card">${v.itens.map(i => `<div class="kv"><span class="k">${i.qtd}x ${esc(i.nome)}</span><span class="v">${money(i.preco * i.qtd)}</span></div>`).join('')}
+        ${v.desconto ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(v.desconto)}</span></div>` : ''}
+        <div class="kv"><span class="k bold">Total · ${FORMAS_PGTO[v.forma]}</span><span class="v gold" style="font-size:20px">${money(v.total)}</span></div></div>`,
+      foot: `<button class="btn primary" onclick="Print.venda(Store.db.vendas.find(x=>x.id==='${v.id}'))">${icon('printer')} Recibo</button>
+        ${v.cancelada ? '' : `<button class="btn danger" onclick="VendasPage.cancelar('${v.id}')">${icon('xCircle')} Cancelar venda</button>`}`,
+    });
+  },
+
+  async cancelar(id) {
+    const v = Store.db.vendas.find(x => x.id === id);
+    if (!(await confirmDialog(`Cancelar a venda #${v.numero}? Os produtos voltam ao estoque e o valor sai do financeiro.`, { danger: true, ok: 'Cancelar venda' }))) return;
+    v.cancelada = true;
+    v.itens.forEach(i => { const p = !i.avulso && Store.produto(i.id); if (p) Store.movimentar('produto', p, i.qtd, `Cancelamento venda #${v.numero}`); });
+    Store.db.lancamentos = Store.db.lancamentos.filter(l => !(l.origem === 'venda' && l.refId === v.id));
+    Store.log('Venda cancelada', `#${v.numero}`); Store.save(); closeAllModals(); App.refresh(); toast('Venda cancelada');
+  },
+};
+Pages.vendas = VendasPage;
