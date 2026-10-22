@@ -205,7 +205,7 @@ const App = {
         } else await Cloud.signIn(f.email.toLowerCase(), f.senha);
         await this.bootCloud();
         this.render();
-      } catch (err) { toast(err.message, true); } finally { btn.disabled = false; }
+      } catch (err) { toast(/fetch|network|load failed/i.test(err.message) ? 'Sem conexão com o servidor. Verifique a internet e tente de novo.' : err.message, true); } finally { btn.disabled = false; }
     };
     const fg = $('#forgot');
     if (fg) fg.onclick = async e => {

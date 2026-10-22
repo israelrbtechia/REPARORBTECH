@@ -4,5 +4,5 @@
    Deixe em branco para usar o app só no aparelho (modo local, sem nuvem). */
 window.RBTECH_CONFIG = {
   supabaseUrl: 'https://hgdembqvkzcvgzgywzxp.supabase.co',
-  supabaseAnonKey: '',
+  supabaseAnonKey: 'sb_publishable_2OXEXtQKO4j6mZflNXk9Wg_dHrZDmxM',
 };
