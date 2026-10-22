@@ -5,7 +5,8 @@ const Print = {
     @media print {
       @page { margin: 12mm; }
       body > *:not(#print-root) { display: none !important; }
-      html, body { background: #fff !important; color: #111 !important; }
+      html, body { background: #fff !important; color: #111 !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
+      #print-root, .pdoc { margin: 0 !important; padding: 0 !important; }
       #print-root { display: block !important; }
     }
     .pdoc { font-family: Inter, Arial, sans-serif; color: #111; font-size: 12.5px; line-height: 1.45; background: #fff; }

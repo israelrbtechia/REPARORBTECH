@@ -193,6 +193,93 @@ const Pdf = {
     return doc;
   },
 
+  /* Recibo de venda com os termos de garantia. Cabe em 1 página; só quebra se não couber. */
+  async recibo(v) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, M = 14, FIM = 280, GOLD = [212, 175, 55], BLACK = [0, 0, 0], GRAY = [90, 90, 90];
+    const s = Store.s, c = v.clienteId ? Store.cliente(v.clienteId) || {} : {};
+    const L = { nome: s.loja, cnpj: s.cnpj, telefone: s.telefone, endereco: s.endereco, instagram: s.instagram };
+    const logo = await this.carregarLogo();
+    this.cabecalho(doc, logo, L, 'RECIBO DE VENDA', `VENDA #${v.numero}`);
+    let y = 51;
+    const espaco = h => { if (y + h > FIM) { doc.addPage(); y = 18; doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...GRAY); doc.text(`${s.loja} · Recibo da venda #${v.numero} (continuação)`, M, 12); } };
+    const titulo = t => { espaco(12); y += 2; doc.setTextColor(...BLACK); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(t.toUpperCase(), M, y); doc.setDrawColor(...GOLD); doc.setLineWidth(0.6); doc.line(M, y + 1.8, W - M, y + 1.8); y += 7; };
+    const kv = (k, val, x) => { doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK); doc.setFontSize(9.5); doc.text(k + ':', x, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 40, 40); doc.text(String(val || '—'), x + 24, y); };
+
+    titulo('Cliente');
+    kv('Nome', c.nome || v.clienteNome || 'Consumidor final', M); kv('Telefone', fmtPhone(c.telefone), M + 100); y += 5.5;
+    if (c.doc) { kv(c.docTipo || 'CPF', c.doc, M); y += 5.5; }
+
+    titulo('Produtos');
+    doc.setFillColor(243, 243, 243); doc.rect(M, y - 4.5, W - 2 * M, 7, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...GRAY);
+    doc.text('PRODUTO', M + 2, y); doc.text('QTD', 128, y, { align: 'right' }); doc.text('UNIT.', 158, y, { align: 'right' }); doc.text('TOTAL', W - M - 2, y, { align: 'right' }); y += 6;
+    for (const i of v.itens) {
+      const desc = doc.splitTextToSize(i.nome + (i.imei ? ` — IMEI ${i.imei}` : ''), 100);
+      espaco(desc.length * 4.6 + 3);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(30, 30, 30);
+      doc.text(desc, M + 2, y); doc.text(String(i.qtd), 128, y, { align: 'right' }); doc.text(money(i.preco), 158, y, { align: 'right' }); doc.text(money(i.preco * i.qtd), W - M - 2, y, { align: 'right' });
+      y += desc.length * 4.6; doc.setDrawColor(225, 225, 225); doc.setLineWidth(0.2); doc.line(M, y - 2.5, W - M, y - 2.5); y += 1.5;
+    }
+    espaco(22);
+    doc.setFontSize(9.5); doc.setTextColor(...GRAY);
+    if (v.desconto) { doc.text('Subtotal ' + money(v.subtotal || v.total + v.desconto) + '   ·   Desconto -' + money(v.desconto), W - M - 2, y, { align: 'right' }); y += 6; }
+    doc.setFillColor(0, 0, 0); doc.roundedRect(M, y - 1, W - 2 * M, 11, 2, 2, 'F');
+    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`${FORMAS_PGTO[v.forma] || v.forma || ''} · ${fmtDateTime(v.data)}`, M + 5, y + 6);
+    doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('TOTAL ' + money(v.total), W - M - 5, y + 6.3, { align: 'right' });
+    y += 16;
+
+    // Garantia agrupada por prazo (ex.: "iPhone 13 — 6 meses" e "28 acessórios — 3 meses")
+    const grupos = {};
+    for (const i of v.itens.filter(i => i.seminovo || i.garantiaDias)) {
+      const dias = i.seminovo ? GARANTIA_SEMINOVO_DIAS : i.garantiaDias;
+      (grupos[dias] ||= []).push(i);
+    }
+    const prazoTxt = d => d >= 365 && d % 365 === 0 ? `${d / 365} ano${d > 365 ? 's' : ''}` : d % 30 === 0 && d >= 60 ? `${d / 30} meses` : `${d} dias`;
+    if (Object.keys(grupos).length) {
+      titulo('Garantia');
+      doc.setFontSize(9.5);
+      for (const [dias, its] of Object.entries(grupos).sort((a, b) => b[0] - a[0])) {
+        const nomes = its.length <= 3 ? its.map(i => i.nome).join(', ') : `${its.length} itens (${its.slice(0, 2).map(i => i.nome).join(', ')}...)`;
+        const linhas = doc.splitTextToSize(nomes, 120);
+        espaco(linhas.length * 4.6 + 2);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK); doc.text(linhas, M, y);
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(40, 40, 40); doc.text(`${prazoTxt(+dias)} · até ${fmtDate(addDays(v.data, +dias))}`, W - M, y, { align: 'right' });
+        y += linhas.length * 4.6 + 1.2;
+      }
+      y += 1;
+    }
+    const termos = [];
+    if (v.itens.some(i => i.seminovo)) termos.push(['Celulares seminovos', s.termosGarantiaSeminovo]);
+    if (v.itens.some(i => !i.seminovo)) termos.push(['Celulares novos e acessórios', s.termosGarantiaProduto]);
+    if (termos.some(t => t[1])) {
+      titulo('Termos de garantia');
+      for (const [t, txt] of termos.filter(t => t[1])) {
+        const linhas = doc.splitTextToSize(txt, W - 2 * M);
+        espaco(6 + linhas.length * 3.7);
+        if (termos.length > 1) { doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...BLACK); doc.text(t, M, y); y += 4.2; }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.2); doc.setTextColor(50, 50, 50);
+        doc.text(linhas, M, y, { lineHeightFactor: 1.3 }); y += linhas.length * 3.7 + 3;
+      }
+    }
+
+    // Assinaturas e rodapé
+    espaco(22);
+    y = Math.min(Math.max(y + 16, 262), FIM - 4);
+    const sig = (label, x) => { doc.setDrawColor(...BLACK); doc.setLineWidth(0.3); doc.line(x, y, x + 80, y); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...GRAY); doc.text(label, x + 40, y + 4.5, { align: 'center' }); };
+    if (s.assinaturaDono) try { doc.addImage(s.assinaturaDono, 'PNG', W - M - 65, y - 17, 50, 16); } catch {}
+    sig('Cliente — ' + (c.nome || v.clienteNome || ''), M); sig(s.loja, W - M - 80);
+    const pages = doc.getNumberOfPages();
+    for (let n = 1; n <= pages; n++) {
+      doc.setPage(n);
+      doc.setFillColor(0, 0, 0); doc.rect(0, 287, W, 10, 'F');
+      doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      doc.text(`Obrigado pela preferência! ${s.loja}${pages > 1 ? `   ·   página ${n} de ${pages}` : ''}`, W / 2, 293, { align: 'center' });
+    }
+    return doc;
+  },
+
   nome(d) { return `garantia-${d.tipo === 'venda' ? 'venda' : 'os'}-${d.numero}.pdf`; },
 
   baixar(doc, nome) { doc.save(nome); },

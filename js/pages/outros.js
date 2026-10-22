@@ -292,6 +292,7 @@ Pages.config = {
           <div class="stat"><div class="label">Seminovos</div><div class="value gold">6 meses</div><div class="sub">sempre, a partir da venda</div></div></div>
         ${field('Termos da garantia de reparos', `<textarea class="input" name="termosGarantia">${esc(s.termosGarantia)}</textarea>`)}
         ${field('Termos da garantia de aparelhos seminovos', `<textarea class="input" name="termosGarantiaSeminovo">${esc(s.termosGarantiaSeminovo || '')}</textarea>`)}
+        ${field('Termos da garantia de celulares novos e acessórios (recibo)', `<textarea class="input" name="termosGarantiaProduto">${esc(s.termosGarantiaProduto || '')}</textarea>`)}
         ${field('Termos da OS de entrada', `<textarea class="input" name="termosEntrada">${esc(s.termosEntrada)}</textarea>`)}
         <button class="btn primary block" id="cf-save">${icon('check')} Salvar configurações</button>
       </div>

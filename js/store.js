@@ -39,6 +39,7 @@ function defaultDB() {
       garantiaDias: 90,
       termosGarantia: 'A garantia cobre exclusivamente o serviço executado e as peças substituídas descritas nesta ordem. Não cobre: danos por queda, contato com líquidos, mau uso, aparelho aberto por terceiros, lacre de garantia violado ou danos na tela causados após a entrega.',
       termosGarantiaSeminovo: 'Garantia de 6 meses contra defeitos de funcionamento do aparelho (placa, tela, bateria, câmeras, áudio e conectores), contados a partir da data da compra. Não cobre: quedas, trincas, contato com líquidos, mau uso, desgaste natural de bateria acima do esperado por uso intenso, aparelho aberto por terceiros, bloqueios por conta (iCloud/Google) feitos pelo comprador ou danos causados por acessórios não originais.',
+      termosGarantiaProduto: 'Celulares novos: garantia do fabricante a partir da data da compra. Acessórios: garantia contra defeito de fabricação pelo prazo indicado. A garantia não cobre mau uso, quedas, contato com líquidos, cabos rompidos ou dobrados, desgaste natural nem produto aberto ou violado. Guarde este recibo: ele é necessário para acionar a garantia.',
       termosEntrada: 'Aparelhos não retirados em até 90 dias após a comunicação de conclusão serão considerados abandonados. A loja não se responsabiliza por dados, chips e cartões de memória deixados no aparelho.',
       taxaDebito: 1.5,
       taxaCredito: 3.5,

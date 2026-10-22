@@ -163,10 +163,19 @@ const VendasPage = {
     openModal({
       title: 'Venda concluída!', icon: 'checkCircle', subtitle: `Venda #${v.numero} · ${money(v.total)}`,
       body: `<div class="center"><div class="gold bold" style="font-size:34px">${money(v.total)}</div><p class="muted">${FORMAS_PGTO[v.forma]} · ${v.itens.length} item(ns)</p></div>${this.garantiasHTML(v)}`,
-      foot: `<button class="btn primary" onclick="Print.venda(Store.db.vendas.find(x=>x.id==='${v.id}'))">${icon('printer')} Recibo</button>
+      foot: `<button class="btn primary" onclick="VendasPage.reciboPdf('${v.id}', true)">${icon('upload')} Recibo (PDF)</button><button class="btn" onclick="VendasPage.reciboPdf('${v.id}')">${icon('download')}</button>
         ${c?.telefone ? `<a class="btn success" target="_blank" href="${waLink(c.telefone, `Olá ${c.nome.split(' ')[0]}! Obrigado pela compra na ${Store.s.loja}! 🛍️\n\n${v.itens.map(i => `• ${i.nome} x${i.qtd}: ${money(i.preco * i.qtd)}`).join('\n')}\n\n*Total: ${money(v.total)}*`)}">${icon('whatsapp')} WhatsApp</a>` : ''}
         <button class="btn" data-close>Fechar</button>`,
     });
+  },
+
+  // Recibo em PDF (com termos de garantia); no celular abre o compartilhar (WhatsApp)
+  async reciboPdf(id, compartilhar) {
+    const v = Store.db.vendas.find(x => x.id === id);
+    toast('Gerando recibo...');
+    const doc = await Pdf.recibo(v);
+    const nome = `recibo-venda-${v.numero}.pdf`;
+    if (compartilhar) await Pdf.compartilhar(doc, nome, `Recibo da venda #${v.numero} — ${Store.s.loja}`); else Pdf.baixar(doc, nome);
   },
 
   // Termos de garantia (PDF) dos aparelhos seminovos da venda
@@ -207,7 +216,7 @@ const VendasPage = {
       body: `${c ? `<p>Cliente: <b>${esc(c.nome)}</b></p>` : v.clienteNome ? `<p>Comprador: <b>${esc(v.clienteNome)}</b></p>` : ''}${this.garantiasHTML(v)}<div class="card">${v.itens.map(i => `<div class="kv"><span class="k">${i.qtd}x ${esc(i.nome)}</span><span class="v">${money(i.preco * i.qtd)}</span></div>`).join('')}
         ${v.desconto ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(v.desconto)}</span></div>` : ''}
         <div class="kv"><span class="k bold">Total · ${FORMAS_PGTO[v.forma]}</span><span class="v gold" style="font-size:20px">${money(v.total)}</span></div></div>`,
-      foot: `<button class="btn primary" onclick="Print.venda(Store.db.vendas.find(x=>x.id==='${v.id}'))">${icon('printer')} Recibo</button>
+      foot: `<button class="btn primary" onclick="VendasPage.reciboPdf('${v.id}', true)">${icon('upload')} Recibo (PDF)</button><button class="btn" onclick="VendasPage.reciboPdf('${v.id}')">${icon('download')}</button>
         ${v.cancelada ? '' : `<button class="btn danger" onclick="VendasPage.cancelar('${v.id}')">${icon('xCircle')} Cancelar venda</button>`}`,
     });
   },
