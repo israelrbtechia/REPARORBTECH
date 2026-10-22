@@ -17,7 +17,12 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 - **Relatórios** e **Configurações** (dados da loja, metas, termos, técnicos/assinaturas, backup/restauração).
 
 ## Como usar
-Não precisa de instalação nem servidor próprio: é só publicar a pasta (ex.: GitHub Pages, Netlify, Vercel) e abrir no celular.
+Site estático, sem build. Publicação na **Vercel**:
+1. Em vercel.com → **Add New → Project** → importe o repositório `REPARORBTECH`.
+2. Framework Preset: **Other**. Deixe *Build Command* e *Output Directory* vazios (raiz).
+3. **Deploy**. Cada push na branch `master` publica uma nova versão automaticamente.
+
+O `vercel.json` garante que o service worker (modo offline) seja sempre atualizado.
 No iPhone: Safari → Compartilhar → **Adicionar à Tela de Início** para usar como app.
 
 Para testar localmente:
