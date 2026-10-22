@@ -184,3 +184,46 @@ begin
 end $$;
 revoke all on function public.adicionar_funcionario(uuid, text, text) from public, anon;
 grant execute on function public.adicionar_funcionario(uuid, text, text) to authenticated;
+
+-- ---------- Pedidos de orçamento feitos pelo próprio cliente (página pública /pedido) ----------
+-- Dados públicos da loja para o cabeçalho da página de pedido
+create or replace function public.info_loja(p_loja uuid) returns jsonb
+  language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('nome', coalesce(s.dados ->> 'loja', l.nome), 'telefone', s.dados -> 'telefone',
+                            'instagram', s.dados -> 'instagram', 'endereco', s.dados -> 'endereco')
+  from public.lojas l left join public.itens s on s.loja_id = l.id and s.colecao = 'meta' and s.id = 'settings'
+  -- sem loja no link: usa a única loja cadastrada (link curto /pedido)
+  where l.id = coalesce(p_loja, (select id from public.lojas where (select count(*) from public.lojas) = 1))
+$$;
+revoke all on function public.info_loja(uuid) from public;
+grant execute on function public.info_loja(uuid) to anon, authenticated;
+
+-- Cliente envia o pedido (sem login). Valida os campos e limita envios repetidos.
+create or replace function public.criar_pedido(p_loja uuid, p_nome text, p_telefone text, p_marca text,
+                                               p_modelo text, p_defeito text, p_urgencia text) returns jsonb
+  language plpgsql security definer set search_path = public as $$
+declare v_tel text := regexp_replace(coalesce(p_telefone, ''), '\D', '', 'g'); v_num int; v_id text;
+begin
+  if p_loja is null and (select count(*) from public.lojas) = 1 then select id into p_loja from public.lojas; end if;
+  if not exists (select 1 from public.lojas where id = p_loja) then raise exception 'Loja não encontrada'; end if;
+  if length(trim(coalesce(p_nome, ''))) < 3 then raise exception 'Informe seu nome completo'; end if;
+  if length(v_tel) < 10 or length(v_tel) > 13 then raise exception 'Informe um WhatsApp válido com DDD'; end if;
+  if length(trim(coalesce(p_modelo, ''))) < 2 then raise exception 'Informe o modelo do aparelho'; end if;
+  if length(trim(coalesce(p_defeito, ''))) < 3 then raise exception 'Descreva o defeito'; end if;
+  if (select count(*) from public.itens where loja_id = p_loja and colecao = 'pedidos'
+        and dados ->> 'telefone' = v_tel and atualizado_em > now() - interval '10 minutes') >= 3
+     or (select count(*) from public.itens where loja_id = p_loja and colecao = 'pedidos'
+        and atualizado_em > now() - interval '1 hour') >= 60 then
+    raise exception 'Muitos pedidos em pouco tempo. Tente novamente mais tarde ou chame no WhatsApp.';
+  end if;
+  select coalesce(max((dados ->> 'numero')::int), 0) + 1 into v_num from public.itens where loja_id = p_loja and colecao = 'pedidos';
+  v_id := 'ped-' || substr(md5(gen_random_uuid()::text), 1, 16);
+  insert into public.itens (loja_id, colecao, id, dados) values (p_loja, 'pedidos', v_id, jsonb_build_object(
+    'id', v_id, 'numero', v_num, 'nome', left(trim(p_nome), 100), 'telefone', v_tel,
+    'marca', left(trim(coalesce(p_marca, '')), 40), 'modelo', left(trim(p_modelo), 80), 'defeito', left(trim(p_defeito), 1000),
+    'urgencia', case when p_urgencia in ('baixa', 'media', 'alta') then p_urgencia else 'media' end,
+    'status', 'novo', 'lido', false, 'criadoEm', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+  return jsonb_build_object('numero', v_num);
+end $$;
+revoke all on function public.criar_pedido(uuid, text, text, text, text, text, text) from public;
+grant execute on function public.criar_pedido(uuid, text, text, text, text, text, text) to anon, authenticated;

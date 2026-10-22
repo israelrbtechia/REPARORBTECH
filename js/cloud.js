@@ -1,7 +1,7 @@
 /* Nuvem (Supabase): autenticação, loja e sincronização.
    Os dados continuam salvos no aparelho (funciona offline); cada registro alterado
    é enviado para a tabela "itens" e mudanças de outros aparelhos chegam em tempo real. */
-const SYNC_COLS = ['clientes', 'os', 'orcamentos', 'pecas', 'fornecedores', 'movEstoque', 'produtos', 'vendas', 'servicos', 'lancamentos', 'caixas', 'auditoria'];
+const SYNC_COLS = ['clientes', 'os', 'orcamentos', 'pecas', 'fornecedores', 'movEstoque', 'produtos', 'vendas', 'servicos', 'lancamentos', 'caixas', 'auditoria', 'pedidos'];
 const META_KEYS = ['settings', 'seq'];
 const SNAP_KEY = 'rbtech_sync_snap';
 
@@ -304,7 +304,9 @@ const Cloud = {
       const r = p.new; if (!r || r.loja_id !== this.loja?.id) return;
       const k = r.colecao + ':' + r.id, h = hash(stableStr(r.dados));
       if (this.snap[k] === h) return; // eco do que este aparelho enviou
+      const novoPedido = r.colecao === 'pedidos' && p.eventType === 'INSERT' && !Store.db.pedidos.some(x => x.id === r.id);
       this.snap[k] = h; this.applyRow(r.colecao, r.id, r.dados);
+      if (novoPedido) setTimeout(() => App.novoPedido(r.dados), 300); // pop-up de pedido feito pelo cliente
     }
     this.saveSnap(); this.afterRemote();
   },

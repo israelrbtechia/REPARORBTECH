@@ -4,6 +4,7 @@ const OSPage = {
 
   render(main, params) {
     if (params.status) { this.st.tab = 'todas'; this.st.statusFilter = params.status; } else this.st.statusFilter = '';
+    if (params.tab) this.st.tab = params.tab;
     if (params.q) this.st.q = params.q;
     const os = Store.db.os.filter(o => !o.deleted);
     const ativos = os.filter(o => OS_ATIVOS.includes(o.status));
@@ -23,6 +24,7 @@ const OSPage = {
       </div>
       <div class="card mb" style="padding:12px">
         <div class="tabs" id="os-tabs">
+          ${(() => { const n = Pedidos.naoLidos().length; return `<button data-k="pedidos" class="${this.st.tab === 'pedidos' ? 'on' : ''}" style="${n ? 'color:var(--gold)' : ''}">${icon('chat', 'sm')}Pedidos${n ? ` <span class="pill gold xs" style="padding:1px 7px">${n} não lido${n > 1 ? 's' : ''}</span>` : ''}</button>`; })()}
           ${[['todas', 'Todas'], ['andamento', 'Em Andamento'], ['finalizadas', 'Finalizadas'], ['lixeira', 'Lixeira']].map(([k, l]) => `<button data-k="${k}" class="${this.st.tab === k ? 'on' : ''}">${k === 'lixeira' ? icon('trash', 'sm') : ''}${l}</button>`).join('')}
         </div>
         <div class="toolbar">
@@ -56,6 +58,10 @@ const OSPage = {
 
   renderList() {
     const box = $('#os-list'); if (!box) return;
+    // aba de pedidos de orçamento enviados pelos clientes
+    $('.toolbar', box.parentElement)?.classList.toggle('hidden', this.st.tab === 'pedidos');
+    box.classList.toggle('pad-0', this.st.tab !== 'pedidos'); box.classList.toggle('card', this.st.tab !== 'pedidos');
+    if (this.st.tab === 'pedidos') { box.innerHTML = Pedidos.lista(); return; }
     const p = paginate(this.filtered(), this.st.page, this.st.per);
     box.innerHTML = `
       <div class="list-head"><b>Mostrando ${p.from}–${p.to} de ${p.total}</b>

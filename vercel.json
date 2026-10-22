@@ -40,6 +40,14 @@
     {
       "source": "/acompanhar/:token",
       "destination": "/acompanhar.html"
+    },
+    {
+      "source": "/pedido/:loja",
+      "destination": "/pedido.html"
+    },
+    {
+      "source": "/pedido",
+      "destination": "/pedido.html"
     }
   ]
 }

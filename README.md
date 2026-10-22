@@ -21,6 +21,9 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 - **Garantia em PDF**: ao marcar a OS como **Concluído**, o app gera o termo de garantia em PDF (baixar ou compartilhar no WhatsApp). O cliente também baixa o PDF pelo link de acompanhamento.
 - **Prazos fixos**: reparos **3 meses** (a partir da conclusão) · aparelhos **seminovos 6 meses** (a partir da venda). Marque o produto como "Aparelho seminovo" para gerar o termo de 6 meses na venda, com IMEI.
 
+## Pedido de orçamento pelo cliente
+Link público `/pedido/<id da loja>` (copie em **Configurações** ou em **OS → Pedidos**): o cliente informa nome, WhatsApp, marca, modelo, defeito e urgência. O pedido chega na hora com **pop-up e som**, aparece na aba **OS → Pedidos** (não lidos em destaque) e no Dashboard. Ao abrir: **Aceitar e criar orçamento** (já preenchido) → enviar o orçamento pelo WhatsApp. Requer a nuvem e o `schema.sql` atualizado.
+
 ## Importar do sistema antigo
 **Configurações → Importar do sistema antigo** lê o *Dossiê de auditoria (CSV)* e importa clientes (só nomes), OS em aberto, vendas do período (opcionalmente no financeiro), estoque e serviços. Não duplica se importado de novo. O dossiê não traz telefones/CPF nem o histórico completo de OS e recebimentos de serviços.
 

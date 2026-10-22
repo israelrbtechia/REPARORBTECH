@@ -57,6 +57,9 @@ Pages.dashboard = {
           </div>`).join('')}
       </div>
 
+      ${(() => { const n = Pedidos.naoLidos().length; return n ? `<div class="card mb row" style="cursor:pointer;border-color:rgba(212,175,55,.6);background:rgba(212,175,55,.08)" onclick="App.go('os',{tab:'pedidos'})">
+        <div class="stat-icon"><div class="ic">${icon('bell')}</div></div>
+        <div class="grow"><b>${n} pedido${n > 1 ? 's' : ''} de orçamento não lido${n > 1 ? 's' : ''}</b><div class="small muted">Enviados pelos clientes pelo link</div></div>${icon('chevRight')}</div>` : ''; })()}
       ${(() => { const f = PosVenda.feedback().length, o = PosVenda.oferta().length; return f + o ? `<div class="card mb row" style="cursor:pointer;border-color:rgba(74,222,128,.35)" onclick="App.go('posvenda')">
         <div class="stat-icon"><div class="ic" style="color:var(--green);background:rgba(74,222,128,.12)">${icon('whatsapp')}</div></div>
         <div class="grow"><b>Pós-venda de hoje</b><div class="small muted">${f ? `<b class="gold">${f}</b> para pedir feedback` : ''}${f && o ? ' · ' : ''}${o ? `<b class="gold">${o}</b> para oferecer capa/película` : ''}</div></div>${icon('chevRight')}</div>` : ''; })()}

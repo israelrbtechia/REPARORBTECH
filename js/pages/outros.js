@@ -325,6 +325,13 @@ Pages.config = {
         <p class="xs muted">Último backup: ${s.ultimoBackup ? fmtDateTime(s.ultimoBackup) : 'nunca'}</p>
       </div>
 
+      ${Pedidos.link() ? `<div class="card mb">
+        <h3>${icon('chat', 'sm')} Link de <span class="gold">pedido de orçamento</span></h3>
+        <p class="small muted" style="margin-top:0">Coloque na bio do Instagram, no status e no WhatsApp. O cliente preenche nome, WhatsApp, marca, modelo, defeito e urgência, e o pedido aparece na hora em <b>OS → Pedidos</b>.</p>
+        <div class="input" style="display:flex;align-items:center;font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${esc(Pedidos.link())}</div>
+        <div class="grid grid-2 mt"><button class="btn" onclick="Pedidos.copiarLink()">${icon('repeat')} Copiar link</button><a class="btn" target="_blank" href="${esc(Pedidos.link())}">${icon('eye')} Abrir</a></div>
+      </div>` : ''}
+
       ${Cloud.enabled && Cloud.loja ? `<div class="card mb" id="cf-equipe">
         <h3>${icon('users', 'sm')} Equipe e <span class="gold">nuvem</span></h3>
         <p class="small muted" style="margin-top:0">Os dados ficam salvos no Supabase e sincronizam em tempo real entre todos os aparelhos da equipe.</p>

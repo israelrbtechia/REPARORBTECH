@@ -56,6 +56,7 @@ function defaultDB() {
     lancamentos: [],
     caixas: [],
     auditoria: [],
+    pedidos: [],
   };
 }
 

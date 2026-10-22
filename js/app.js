@@ -70,6 +70,24 @@ const App = {
     this.params = Object.fromEntries(new URLSearchParams(q || ''));
   },
 
+  /* ---------- Pedidos de orçamento feitos pelo cliente ---------- */
+  // Pedido novo chegou em tempo real: som + pop-up
+  novoPedido(p) {
+    if (!this.logged() || p.lido) return;
+    this._avisouPedidos = true;
+    Pedidos.alerta();
+    this.updateNav();
+    if (this.route === 'os' && OSPage.st.tab === 'pedidos') this.refresh();
+    Pedidos.popup([p]);
+  },
+  // Ao abrir o app (ou após sincronizar): avisa uma vez dos pedidos não lidos
+  avisarPedidos() {
+    if (this._avisouPedidos || !this.logged() || !$('#main')) return;
+    const n = Pedidos.naoLidos(); if (!n.length) return;
+    this._avisouPedidos = true;
+    setTimeout(() => Pedidos.popup(n), 600);
+  },
+
   checkRecovery() { if (Cloud.recovery) { Cloud.recovery = false; Pages.config.senha(true); } },
 
   render() {
@@ -88,13 +106,14 @@ const App = {
     main.innerHTML = '';
     Pages[this.route].render(main, this.params);
     scrollTo(0, 0);
+    this.avisarPedidos();
   },
 
   refresh() { const y = scrollY; const main = $('#main'); Pages[this.route].render(main, this.params); this.updateNav(); scrollTo(0, y); },
 
   // Atualização vinda da nuvem: não atrapalha quem está digitando numa busca
   remoteRefresh() {
-    this.updateNav(); this.updateBrand();
+    this.updateNav(); this.updateBrand(); this.avisarPedidos();
     if (window._dd) return setTimeout(() => this.remoteRefresh(), 800); // menu aberto: espera fechar
     const a = document.activeElement;
     if (a && $('#main')?.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) {
@@ -153,7 +172,9 @@ const App = {
       orcamentos: Store.db.orcamentos.filter(o => !o.deleted && o.status === 'pendente').length,
       pecas: Store.db.pecas.filter(p => !p.deleted && p.qtd <= (p.minimo || 0)).length,
       posvenda: PosVenda.pendentes(),
+      os: Pedidos.naoLidos().length,
     };
+    document.title = (counts.os ? `(${counts.os}) ` : '') + 'RB Tech Celulares';
     for (const [r, n] of Object.entries(counts)) {
       const el = $(`#nav a[data-r="${r}"] .count`);
       if (el) { el.textContent = n; el.classList.toggle('hidden', !n); }

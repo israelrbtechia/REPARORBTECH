@@ -42,16 +42,18 @@ const OrcPage = {
     }).join('') || `<div class="empty">${icon('card')}<div>Nenhum orçamento.</div></div>`);
   },
 
-  novo(id) {
-    const orc = id ? JSON.parse(JSON.stringify(Store.db.orcamentos.find(o => o.id === id))) : { itens: [{ desc: '', qtd: 1, valor: 0 }], validade: dayKey(addDays(new Date(), 7)), aparelho: {} };
+  // pre: dados vindos de um pedido do cliente (pedidoId, clienteId, nome, telefone, aparelho, defeito)
+  novo(id, pre = {}) {
+    const orc = id ? JSON.parse(JSON.stringify(Store.db.orcamentos.find(o => o.id === id))) : { itens: [{ desc: '', qtd: 1, valor: 0 }], validade: dayKey(addDays(new Date(), 7)), aparelho: { modelo: pre.aparelho || '' }, defeito: pre.defeito || '', clienteId: pre.clienteId || null, pedidoId: pre.pedidoId || null };
     const clientes = Store.clientesAtivos();
     openModal({
       title: id ? `Editar orçamento ${orc.numero}` : 'Novo Orçamento', icon: 'card', wide: true,
+      subtitle: pre.pedidoId ? `A partir do pedido de ${pre.nome}` : '',
       body: `
         <div class="section-title">Cliente</div>
         <div class="form-row r-1-2 collapse">
           ${field('Cliente cadastrado', `<select class="input" id="orc-cli"><option value="">— Novo cliente —</option>${clientes.map(c => `<option value="${c.id}" ${c.id === orc.clienteId ? 'selected' : ''}>${esc(c.nome)}${c.telefone ? ' · ' + esc(fmtPhone(c.telefone)) : ''}</option>`).join('')}</select>`)}
-          <div id="orc-newcli" class="${orc.clienteId ? 'hidden' : ''}"><div class="form-row">${field('Nome', '<input class="input" id="orc-nome" placeholder="Nome do cliente">', { req: true })}${field('Telefone', '<input class="input" id="orc-tel" type="tel" placeholder="(11) 99999-9999">')}</div></div>
+          <div id="orc-newcli" class="${orc.clienteId ? 'hidden' : ''}"><div class="form-row">${field('Nome', `<input class="input" id="orc-nome" placeholder="Nome do cliente" value="${esc(pre.nome || '')}">`, { req: true })}${field('Telefone', `<input class="input" id="orc-tel" type="tel" placeholder="(11) 99999-9999" value="${esc(fmtPhone(pre.telefone || ''))}">`)}</div></div>
         </div>
         <div class="section-title">Aparelho e problema</div>
         <div class="form-row">${field('Aparelho', `<input class="input" id="orc-ap" placeholder="Ex: iPhone 11" value="${esc(orc.aparelho?.modelo || '')}">`, { req: true })}${field('IMEI', `<input class="input" id="orc-imei" value="${esc(orc.aparelho?.imei || '')}">`, { opt: true })}</div>
@@ -93,8 +95,9 @@ const OrcPage = {
           Object.assign(orc, { clienteId, aparelho: { ...orc.aparelho, modelo, imei: $('#orc-imei', el).value.trim(), tipo: orc.aparelho?.tipo || 'celular' }, defeito: $('#orc-def', el).value.trim(), validade: $('#orc-val', el).value, prazo: $('#orc-prazo', el).value.trim(), obs: $('#orc-obs', el).value.trim() });
           if (!orc.id) { orc.id = uid(); orc.numero = Store.next('orc'); orc.criadoEm = nowISO(); orc.status = 'pendente'; Store.db.orcamentos.push(orc); Store.log('Orçamento criado', `#${orc.numero}`); }
           else { const i = Store.db.orcamentos.findIndex(x => x.id === orc.id); Store.db.orcamentos[i] = orc; }
+          if (orc.pedidoId) { const p = Pedidos.get(orc.pedidoId); if (p) { p.status = 'orcado'; p.orcamentoId = orc.id; p.lido = true; } }
           Store.save(); m.close();
-          if (App.route === 'orcamentos') App.refresh();
+          if (App.route === 'orcamentos' || App.route === 'os') App.refresh();
           toast('Orçamento salvo'); this.detalhe(orc.id);
         };
       },
