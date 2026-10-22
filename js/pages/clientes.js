@@ -133,7 +133,7 @@ const ClientesPage = {
     const c = Store.cliente(id);
     const os = Store.db.os.filter(o => o.clienteId === id && !o.deleted).sort((a, b) => b.numero - a.numero);
     const vendas = Store.db.vendas.filter(v => v.clienteId === id && !v.cancelada);
-    const gasto = os.filter(o => o.status === 'pago').reduce((s, o) => s + Store.osTotal(o), 0) + vendas.reduce((s, v) => s + v.total, 0);
+    const gasto = os.filter(o => o.status === 'pago').reduce((s, o) => s + Store.osTotal(o), 0) + vendas.filter(v => !v.importado).reduce((s, v) => s + v.total, 0) + (Number(c.sistemaAntigo?.totalGasto) || 0);
     openModal({
       title: c.nome, subtitle: `Cliente desde ${fmtDate(c.criadoEm)}`, icon: 'user', wide: true,
       body: `
@@ -148,6 +148,7 @@ const ClientesPage = {
           <div class="kv"><span class="k">E-mail</span><span class="v">${esc(c.email || '—')}</span></div>
           <div class="kv"><span class="k">Endereço</span><span class="v">${esc(c.endereco || '—')}</span></div>
           <div class="kv"><span class="k">Origem</span><span class="v">${esc(c.origem || '—')}</span></div>
+          ${c.sistemaAntigo ? `<div class="kv"><span class="k">No sistema antigo</span><span class="v">${money(c.sistemaAntigo.totalGasto)} gastos · última visita ${fmtDate(c.sistemaAntigo.ultimaVisita)}</span></div>` : ''}
         </div>
         <div class="card mb"><h3>Aparelhos</h3>${(c.aparelhos || []).map(a => `<div class="cart-line">${icon('phone')}<div class="grow"><b>${esc(a.modelo)}</b><div class="xs muted">${esc(a.imei || '')} ${esc(a.cor || '')}</div></div><button class="btn sm outline-gold" onclick="closeAllModals();OSPage.novaOS({clienteId:'${c.id}'})">Nova OS</button></div>`).join('') || '<p class="small muted">Nenhum aparelho.</p>'}</div>
         <div class="card pad-0"><div class="list-head"><b>Histórico de OS</b></div>${os.map(o => Pages.dashboard.osMini(o)).join('') || '<div class="empty small">Nenhuma OS.</div>'}</div>`,
