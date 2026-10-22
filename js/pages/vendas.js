@@ -255,19 +255,24 @@ const VendasPage = {
         <label class="check"><input type="checkbox" id="nf-salvar" checked> Salvar no cadastro de produtos</label>
         <div class="row"><button class="btn" id="nf-cancel">Cancelar</button><button class="btn primary grow" id="nf-ok">${icon('plus')} Adicionar à venda</button></div>`;
       const setTipo = t => { $('#nf-tipo', el).value = t; $$('#nf-tipos [data-tp]', el).forEach(x => x.classList.toggle('on', x.dataset.tp === t)); $('#nf-cel', el).classList.toggle('hidden', t === 'acessorio'); $('#nf-ac', el).classList.toggle('hidden', t !== 'acessorio'); };
-      $$('#nf-tipos [data-tp]', el).forEach(b => b.onclick = () => setTipo(b.dataset.tp));
+      let manual = false; // depois que você escolhe o tipo, ele não muda mais sozinho
+      $$('#nf-tipos [data-tp]', el).forEach(b => b.onclick = () => { manual = true; setTipo(b.dataset.tp); });
       setTipo($('#nf-tipo', el).value);
+      $('#nf-nome', el).addEventListener('input', e => { if (!manual) setTipo(/iphone|galaxy|samsung|motorola|moto |xiaomi|redmi|poco|realme|celular/i.test(e.target.value) ? 'seminovo' : 'acessorio'); });
       $('#nf-cancel', el).onclick = () => f.classList.add('hidden');
-      $('#nf-ok', el).onclick = () => {
+      // também é chamado pelo "Confirmar venda" quando o formulário está preenchido
+      sale.addForm = () => {
         const t = $('#nf-tipo', el).value, nm = $('#nf-nome', el).value.trim(), preco = parseMoney($('#nf-preco', el).value);
-        if (!nm || !preco) return toast('Informe o nome e o preço', true);
+        if (!nm || !preco) { toast(!nm ? 'Informe o nome do produto' : 'Informe o preço de venda', true); return false; }
         const cel = t !== 'acessorio';
         sale.itens.push({ id: 'novo-' + uid(), novo: true, salvar: $('#nf-salvar', el).checked, nome: nm, preco, custo: parseMoney($('#nf-custo', el).value), qtd: cel ? 1 : Math.max(1, +$('#nf-qtd', el).value || 1),
           tipoProduto: t, seminovo: t === 'seminovo', aparelho: cel, imei: cel ? $('#nf-imei', el).value.trim() : '', cor: cel ? $('#nf-cor', el).value.trim() : '',
           armazenamento: cel ? $('#nf-arm', el).value.trim() : '', bateria: cel ? $('#nf-bat', el).value.trim() : '',
           garantiaDias: t === 'seminovo' ? GARANTIA_SEMINOVO_DIAS : t === 'novo' ? 365 : (+$('#nf-gar', el).value || 0) });
-        f.classList.add('hidden'); itens();
+        f.classList.add('hidden'); sale.addForm = null; itens();
+        return true;
       };
+      $('#nf-ok', el).onclick = () => sale.addForm();
       $('#nf-nome', el).focus();
     };
 
@@ -303,6 +308,11 @@ const VendasPage = {
 
     $('#nv-ok', el).onclick = () => {
       if (Store.s.exigirCaixa && !Store.caixaAberto()) return toast('Abra o caixa antes de vender', true);
+      // produto preenchido no "Cadastrar e adicionar" entra na venda sem precisar tocar em Adicionar
+      const form = $('#nv-form', el);
+      if (sale.addForm && !form.classList.contains('hidden') && ($('#nf-nome', el).value.trim() || $('#nf-preco', el).value.trim())) {
+        if (!sale.addForm()) { form.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      }
       if (!sale.itens.length) return toast('Adicione pelo menos um produto', true);
       const { sub, desc, troca } = calc();
       if (desc > sub) return toast('Desconto maior que o total', true);
