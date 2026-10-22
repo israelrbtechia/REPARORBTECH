@@ -29,7 +29,7 @@ const Metas = {
 
   // Itens vendidos no mês (com lucro de cada item, já descontando o desconto proporcional)
   vendidos(mes) {
-    const out = [];
+    const out = []; out.mes = mes;
     for (const v of Store.db.vendas) {
       if (v.cancelada || monthKey(v.data) !== mes) continue;
       const sub = v.itens.reduce((s, i) => s + i.preco * i.qtd, 0) || 1;
@@ -46,7 +46,9 @@ const Metas = {
   depois(i, desde) { return !desde || monthKey(i.venda.data) !== monthKey(desde) || String(i.venda.data) > desde; },
   progresso(meta, vendidos) {
     const its = (meta.tipo === 'celulares' ? vendidos.filter(i => i.celular) : vendidos.filter(i => (meta.produtoIds || []).includes(i.id))).filter(i => this.depois(i, meta.resetEm));
-    return { feito: its.reduce((s, i) => s + i.qtd, 0), itens: its };
+    // quantidade informada manualmente (vale no mês em que foi ajustada) + vendas feitas depois do ajuste
+    const base = meta.resetEm && meta.base && vendidos.mes === monthKey(meta.resetEm) ? Number(meta.base) || 0 : 0;
+    return { feito: base + its.reduce((s, i) => s + i.qtd, 0), itens: its, base };
   },
 };
 
@@ -113,9 +115,10 @@ Pages.metas = {
             <span>${atual && l.falta && restantes ? `~${(l.falta / restantes).toFixed(1).replace('.', ',')} por dia` : ''}${atual && passados ? ` · projeção ${l.proj}` : ''}</span></div>
           ${l.semProduto ? `<button class="btn sm outline-gold block mt" onclick="Pages.metas.escolherProdutos('${l.meta.id}')">${icon('plus', 'sm')} Escolher produtos</button>` : ''}
           <div class="row wrap between mt" style="border-top:1px dashed var(--line);padding-top:10px;gap:8px">
-            <span class="xs muted" style="flex:1 1 100%">${l.meta.resetEm ? `${icon('repeat', 'sm')} Contando desde ${fmtDateTime(l.meta.resetEm)}` : 'Contando o mês inteiro'}</span>
-            <span class="row" style="gap:6px;margin-left:auto">${l.meta.resetEm ? `<button class="btn sm ghost" onclick="Pages.metas.zerar('${l.meta.id}', true)">${icon('undo', 'sm')} Desfazer</button>` : ''}
-              <button class="btn sm" onclick="Pages.metas.zerar('${l.meta.id}')">${icon('repeat', 'sm')} Zerar contagem</button></span>
+            <span class="xs muted" style="flex:1 1 100%">${l.meta.resetEm ? `${icon('repeat', 'sm')} ${l.meta.base ? `Ajustado para ${l.meta.base} em ${fmtDateTime(l.meta.resetEm)} + vendas depois disso` : `Contando desde ${fmtDateTime(l.meta.resetEm)}`}` : 'Contando o mês inteiro'}</span>
+            <span class="row wrap" style="gap:6px;margin-left:auto;justify-content:flex-end">${l.meta.resetEm ? `<button class="btn sm ghost" onclick="Pages.metas.zerar('${l.meta.id}', true)">${icon('undo', 'sm')} Desfazer</button>` : ''}
+              <button class="btn sm" onclick="Pages.metas.ajustar('${l.meta.id}')">${icon('edit', 'sm')} Editar qtd.</button>
+              <button class="btn sm" onclick="Pages.metas.zerar('${l.meta.id}')">${icon('repeat', 'sm')} Zerar</button></span>
           </div>
         </div>`).join('')}
       </div>
@@ -131,7 +134,7 @@ Pages.metas = {
           <div class="xs muted">Meta do mês = ${metaCel?.alvo || 0} aparelhos × ${money(meta)}</div></div>
         <div class="row wrap between mt" style="border-top:1px dashed var(--line);padding-top:10px;gap:8px">
           <span class="xs muted" style="flex:1 1 100%">${cfg.lucroResetEm ? `${icon('repeat', 'sm')} Contando desde ${fmtDateTime(cfg.lucroResetEm)}` : 'Contando o mês inteiro'}</span>
-          <span class="row" style="gap:6px;margin-left:auto">${cfg.lucroResetEm ? `<button class="btn sm ghost" onclick="Pages.metas.zerar('lucro', true)">${icon('undo', 'sm')} Desfazer</button>` : ''}
+          <span class="row wrap" style="gap:6px;margin-left:auto;justify-content:flex-end">${cfg.lucroResetEm ? `<button class="btn sm ghost" onclick="Pages.metas.zerar('lucro', true)">${icon('undo', 'sm')} Desfazer</button>` : ''}
             <button class="btn sm" onclick="Pages.metas.zerar('lucro')">${icon('repeat', 'sm')} Zerar contagem</button></span>
         </div>
         ${cels.length - comCusto.length ? `<div class="info-box mt">${icon('info')}<span>${cels.length - comCusto.length} aparelho(s) vendido(s) sem custo cadastrado não entram no cálculo de lucro (ex.: vendas importadas do sistema antigo).</span></div>` : ''}
@@ -149,13 +152,37 @@ Pages.metas = {
     const meta = id === 'lucro' ? null : cfg.itens.find(i => i.id === id);
     const nome = meta ? meta.nome : 'Lucro por aparelho';
     if (desfazer) {
-      if (meta) delete meta.resetEm; else delete cfg.lucroResetEm;
+      if (meta) { delete meta.resetEm; delete meta.base; } else delete cfg.lucroResetEm;
       Store.save(); App.refresh(); return toast(`${nome}: voltou a contar o mês inteiro`);
     }
     if (!(await confirmDialog(`Zerar a contagem de "${nome}"? A meta passa a contar só as vendas feitas a partir de agora. As vendas não são apagadas e dá para desfazer.`, { ok: 'Zerar contagem' }))) return;
-    if (meta) meta.resetEm = nowISO(); else cfg.lucroResetEm = nowISO();
+    if (meta) { meta.resetEm = nowISO(); delete meta.base; } else cfg.lucroResetEm = nowISO();
     Store.log('Meta zerada', nome);
     Store.save(); App.refresh(); toast(`${nome}: contagem zerada`);
+  },
+
+  // Corrige à mão quantos já foram vendidos; as próximas vendas continuam somando
+  ajustar(id) {
+    const meta = Metas.cfg().itens.find(i => i.id === id);
+    const atual = Metas.progresso(meta, Metas.vendidos(monthKey())).feito;
+    openModal({
+      title: 'Editar quantidade vendida', icon: 'edit', subtitle: meta.nome,
+      body: `<p class="small muted" style="margin-top:0">Informe quanto já foi vendido neste mês. A partir de agora, cada venda nova soma em cima desse número.</p>
+        ${field('Quantidade já vendida', `<input class="input" id="aj-n" type="number" min="0" value="${atual}" style="font-size:28px;font-weight:800;text-align:center">`)}
+        <div class="row" style="justify-content:center;gap:10px">${[-1, 1, 5].map(d => `<button class="btn sm" data-d="${d}">${d > 0 ? '+' : ''}${d}</button>`).join('')}</div>
+        <p class="xs muted center">Meta: ${meta.alvo}</p>`,
+      foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="aj-ok">${icon('check')} Salvar</button>`,
+      onMount: (el, m) => {
+        const inp = $('#aj-n', el); inp.select();
+        $$('[data-d]', el).forEach(b => b.onclick = () => { inp.value = Math.max(0, (+inp.value || 0) + +b.dataset.d); });
+        $('#aj-ok', el).onclick = () => {
+          const n = Math.max(0, parseInt(inp.value) || 0);
+          meta.resetEm = nowISO(); meta.base = n;
+          Store.log('Meta ajustada', `${meta.nome}: ${n}`);
+          Store.save(); m.close(); App.refresh(); toast(`${meta.nome}: ${n} vendido(s)`);
+        };
+      },
+    });
   },
 
   mudarMes(d) {
