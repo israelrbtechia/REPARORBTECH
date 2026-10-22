@@ -175,25 +175,3 @@ const ClientesPage = {
   },
 };
 Pages.clientes = ClientesPage;
-
-/* Aparelhos: todos os aparelhos de todos os clientes */
-Pages.aparelhos = {
-  q: '',
-  render(main) {
-    main.innerHTML = `
-      ${pageHead('devices', 'Aparelhos', 'Todos os aparelhos cadastrados. Busque por IMEI, serial ou modelo.')}
-      <div class="card mb" style="padding:12px"><div class="input-icon">${icon('search')}<input class="input" id="ap-q" placeholder="Buscar IMEI, modelo, cliente..." value="${esc(this.q)}"></div></div>
-      <div class="card pad-0" id="ap-list"></div>`;
-    $('#ap-q').oninput = e => { this.q = e.target.value; this.list(); };
-    this.list();
-  },
-  list() {
-    const all = Store.clientesAtivos().flatMap(c => (c.aparelhos || []).map(a => ({ a, c })))
-      .filter(({ a, c }) => matches(this.q, a.modelo, a.imei, a.cor, c.nome));
-    $('#ap-list').innerHTML = `<div class="list-head"><b>${all.length} aparelho(s)</b></div>` + (all.slice(0, 200).map(({ a, c }) => {
-      const n = Store.db.os.filter(o => !o.deleted && o.clienteId === c.id && o.aparelho && (o.aparelho.id === a.id || (a.imei && o.aparelho.imei === a.imei))).length;
-      return `<div class="item" onclick="ClientesPage.detalhe('${c.id}')"><div class="row">${icon((TIPOS_APARELHO.find(t => t[0] === a.tipo) || [])[2] || 'phone', 'lg')}
-        <div class="grow"><b class="gold">${esc(a.modelo)}</b><div class="small muted">${esc(c.nome)} · ${esc(a.imei || 'sem IMEI')} ${a.cor ? '· ' + esc(a.cor) : ''}</div></div><span class="pill">${n} OS</span></div></div>`;
-    }).join('') || `<div class="empty">${icon('devices')}<div>Nenhum aparelho encontrado.</div></div>`);
-  },
-};

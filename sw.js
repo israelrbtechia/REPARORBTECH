@@ -1,9 +1,9 @@
 /* Cache offline do app */
-const CACHE = 'rbtech-v11';
+const CACHE = 'rbtech-v13';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/config.js', 'js/vendor/supabase.js', 'js/cloud.js', 'js/vendor/jspdf.umd.min.js', 'js/pdf.js',
-  'acompanhar.html', 'js/acompanhar.js', 'js/importar.js', 'js/pages/pedidos.js', 'pedido.html', 'js/pedido.js',
+  'acompanhar.html', 'js/acompanhar.js', 'js/importar.js', 'js/pages/pedidos.js', 'js/pages/aparelhos.js', 'pedido.html', 'js/pedido.js',
   'js/util.js', 'js/store.js', 'js/print.js', 'js/ui.js', 'js/app.js',
   'js/pages/dashboard.js', 'js/pages/os.js', 'js/pages/orcamentos.js', 'js/pages/clientes.js',
   'js/pages/estoque.js', 'js/pages/vendas.js', 'js/pages/financeiro.js', 'js/pages/outros.js',

@@ -45,16 +45,17 @@ const FinPage = {
         <div class="stat"><div class="label">${icon('box', 'sm')} Custo de peças/produtos</div><div class="value red">${money(r.custo)}</div></div>
         <div class="stat"><div class="label">${icon('card', 'sm')} Taxas de cartão</div><div class="value red">${money(r.taxa)}</div></div>
         <div class="stat"><div class="label">${icon('minus', 'sm')} Despesas</div><div class="value red">${money(r.despesa)}</div></div>
+        ${r.compras ? `<div class="stat" style="grid-column:1/-1"><div class="label">${icon('box', 'sm')} Compras de estoque e aparelhos</div><div class="value">${money(r.compras)}</div><div class="sub">Saíram do caixa, mas não reduzem o lucro agora: o custo entra quando o item é vendido.</div></div>` : ''}
       </div>
       <div class="grid grid-auto mb">
-        <div class="card"><h3>Recebido por <span class="gold">forma</span></h3>${Object.entries(porForma).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="kv"><span class="k">${FORMAS_PGTO[k] || k}</span><span class="v">${money(v)}</span></div>`).join('') || '<p class="small muted">Sem receitas no período.</p>'}</div>
+        <div class="card"><h3>Recebido por <span class="gold">forma</span></h3>${Object.entries(porForma).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="kv"><span class="k">${nomeForma(k)}</span><span class="v">${money(v)}</span></div>`).join('') || '<p class="small muted">Sem receitas no período.</p>'}</div>
         <div class="card"><h3>Despesas por <span class="gold">categoria</span></h3>${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="kv"><span class="k">${esc(k)}</span><span class="v red">${money(v)}</span></div>`).join('') || '<p class="small muted">Sem despesas no período.</p>'}</div>
       </div>
       <div class="card pad-0">
         <div class="list-head"><b>Lançamentos (${ls.length})</b><select class="input" id="fin-tipo" style="width:auto;min-height:38px;padding:6px 40px 6px 12px">${selectOpts({ '': 'Todos', receita: 'Receitas', despesa: 'Despesas' }, this.st.tipo)}</select></div>
         ${ls.slice(0, 300).map(l => `<div class="item" style="cursor:default;padding:12px 18px"><div class="row">
           <div class="stat-icon"><div class="ic" style="width:38px;height:38px;${l.tipo === 'despesa' ? 'color:var(--red);background:rgba(248,113,113,.1)' : ''}">${icon(l.tipo === 'despesa' ? 'minus' : l.origem === 'venda' ? 'bag' : l.origem === 'os' ? 'wrench' : 'plus', 'sm')}</div></div>
-          <div class="grow"><b class="ellipsis" style="display:block">${esc(l.desc)}</b><div class="xs muted">${fmtDateTime(l.data)} · ${FORMAS_PGTO[l.forma] || ''} · ${esc(l.categoria || '')}</div></div>
+          <div class="grow"><b class="ellipsis" style="display:block">${esc(l.desc)}</b><div class="xs muted">${fmtDateTime(l.data)} · ${nomeForma(l.forma)} · ${esc(l.categoria || '')}</div></div>
           <div class="right"><b class="${l.tipo === 'despesa' ? 'red' : 'gold'}">${l.tipo === 'despesa' ? '-' : '+'}${money(l.valor)}</b>${l.custo || l.taxa ? `<div class="xs muted">custo ${money((l.custo || 0) + (l.taxa || 0))}</div>` : ''}</div>
           ${l.origem === 'manual' ? `<button class="icon-btn" onclick="FinPage.excluir('${l.id}')">${icon('trash', 'sm')}</button>` : ''}
         </div></div>`).join('') || `<div class="empty">${icon('chart')}<div>Nenhum lançamento no período.</div></div>`}
@@ -93,7 +94,7 @@ const FinPage = {
     const [de, ate] = this.range();
     const rows = [['Data', 'Tipo', 'Descrição', 'Categoria', 'Forma', 'Valor', 'Custo', 'Taxa']];
     Store.db.lancamentos.filter(l => { const k = dayKey(l.data); return k >= de && k <= ate; }).sort((a, b) => a.data.localeCompare(b.data))
-      .forEach(l => rows.push([fmtDateTime(l.data), l.tipo, l.desc, l.categoria, FORMAS_PGTO[l.forma] || l.forma, moneyInput(l.valor), moneyInput(l.custo), moneyInput(l.taxa)]));
+      .forEach(l => rows.push([fmtDateTime(l.data), l.tipo, l.desc, l.categoria, nomeForma(l.forma), moneyInput(l.valor), moneyInput(l.custo), moneyInput(l.taxa)]));
     download(`financeiro-${de}-a-${ate}.csv`, toCSV(rows), 'text/csv;charset=utf-8');
   },
 };
@@ -143,7 +144,7 @@ Pages.caixa = {
             <div class="kv"><span class="k">Sangrias</span><span class="v red">-${money(r.sangrias)}</span></div>
             <div class="kv"><span class="k">Despesas pagas em dinheiro</span><span class="v red">-${money(r.saidasDin)}</span></div>
             <div class="kv"><span class="k bold">Esperado</span><span class="v gold">${money(r.esperado)}</span></div></div>
-          <div class="card"><h3>Por forma de pagamento</h3>${Object.entries(r.porForma).map(([k, v]) => `<div class="kv"><span class="k">${FORMAS_PGTO[k]}</span><span class="v">${money(v)}</span></div>`).join('') || '<p class="small muted">Nenhum recebimento ainda.</p>'}</div>
+          <div class="card"><h3>Por forma de pagamento</h3>${Object.entries(r.porForma).map(([k, v]) => `<div class="kv"><span class="k">${nomeForma(k)}</span><span class="v">${money(v)}</span></div>`).join('') || '<p class="small muted">Nenhum recebimento ainda.</p>'}</div>
         </div>
         ${(cx.movs || []).length ? `<div class="card mb"><h3>Movimentações</h3>${cx.movs.map(m => `<div class="kv"><span class="k">${fmtDateTime(m.data)} · ${m.tipo === 'sangria' ? 'Sangria' : 'Suprimento'} ${m.desc ? '— ' + esc(m.desc) : ''}</span><span class="v ${m.tipo === 'sangria' ? 'red' : 'green'}">${money(m.valor)}</span></div>`).join('')}</div>` : ''}
         <button class="btn primary block mb" id="cx-fechar">${icon('lock')} Fechar caixa</button>`;

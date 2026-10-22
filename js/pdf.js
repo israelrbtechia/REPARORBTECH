@@ -225,8 +225,15 @@ const Pdf = {
     espaco(22);
     doc.setFontSize(9.5); doc.setTextColor(...GRAY);
     if (v.desconto) { doc.text('Subtotal ' + money(v.subtotal || v.total + v.desconto) + '   ·   Desconto -' + money(v.desconto), W - M - 2, y, { align: 'right' }); y += 6; }
+    if (v.troca) {
+      espaco(12);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(40, 40, 40);
+      doc.text(doc.splitTextToSize(`Aparelho recebido na troca: ${v.troca.nome}${v.troca.imei ? ' (IMEI ' + v.troca.imei + ')' : ''}`, 130), M + 2, y);
+      doc.text('-' + money(v.troca.valor), W - M - 2, y, { align: 'right' }); y += 5.5;
+      doc.setFont('helvetica', 'bold'); doc.text(v.pago >= 0 ? 'Valor pago pelo cliente' : 'Valor devolvido ao cliente', M + 2, y); doc.text(money(Math.abs(v.pago)), W - M - 2, y, { align: 'right' }); y += 6;
+    }
     doc.setFillColor(0, 0, 0); doc.roundedRect(M, y - 1, W - 2 * M, 11, 2, 2, 'F');
-    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`${FORMAS_PGTO[v.forma] || v.forma || ''} · ${fmtDateTime(v.data)}`, M + 5, y + 6);
+    doc.setTextColor(200, 200, 200); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`${v.troca ? 'Troca + ' : ''}${FORMAS_PGTO[v.forma] || v.forma || ''} · ${fmtDateTime(v.data)}`, M + 5, y + 6);
     doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('TOTAL ' + money(v.total), W - M - 5, y + 6.3, { align: 'right' });
     y += 16;
 

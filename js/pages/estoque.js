@@ -101,6 +101,7 @@ const EstoquePage = {
           <div id="ed-semi" class="${ehCelular(p) ? '' : 'hidden'}">
             <div class="form-row">${field('IMEI / Serial', `<input class="input" name="imei" value="${esc(p.imei || '')}" style="font-family:ui-monospace,monospace">`, { opt: true })}${field('Cor', `<input class="input" name="cor" value="${esc(p.cor || '')}">`, { opt: true })}</div>
             <div class="form-row">${field('Armazenamento', `<input class="input" name="armazenamento" placeholder="Ex: 128 GB" value="${esc(p.armazenamento || '')}">`, { opt: true })}${field('Saúde da bateria', `<input class="input" name="bateria" placeholder="Ex: 89%" value="${esc(p.bateria || '')}">`, { opt: true })}</div>
+            <div class="form-row">${field('Condição', `<select class="input" name="condicao"><option value="">—</option>${selectOpts(CONDICOES, p.condicao)}</select>`, { opt: true })}${field('Status', `<select class="input" name="statusAparelho">${selectOpts(Object.fromEntries(Object.entries(STATUS_AP).map(([k, [l]]) => [k, l])), p.statusAparelho || 'disponivel')}</select>`)}</div>
           </div>
           <div id="ed-gar" class="${p.seminovo ? 'hidden' : ''}">${field('Garantia (dias)', `<input class="input" type="number" name="garantiaDias" value="${p.garantiaDias ?? (tipoProduto(p) === 'novo' ? 365 : 90)}">`)}</div>` : ''}
         ${field('Fornecedor', `<select class="input" name="fornecedorId"><option value="">—</option>${selectOpts(forns.map(f => [f.id, f.nome]), p.fornecedorId)}</select>`, { opt: true })}`,
@@ -122,8 +123,8 @@ const EstoquePage = {
           if (!f.nome) return toast('Informe o nome', true);
           const qtd = parseInt(f.qtd) || 0;
           Object.assign(p, { nome: f.nome, codigo: f.codigo, categoria: f.categoria, compat: f.compat, custo: parseMoney(f.custo), preco: parseMoney(f.preco), minimo: parseInt(f.minimo) || 0, fornecedorId: f.fornecedorId });
-          if (tipo === 'produto') Object.assign(p, { tipoProduto: f.tipoProduto, seminovo: f.tipoProduto === 'seminovo', imei: f.imei, cor: f.cor, armazenamento: f.armazenamento, bateria: f.bateria, garantiaDias: f.tipoProduto === 'seminovo' ? GARANTIA_SEMINOVO_DIAS : parseInt(f.garantiaDias) || 0 });
-          if (!id) { p.id = uid(); p.criadoEm = nowISO(); p.qtd = 0; col.push(p); if (qtd) Store.movimentar(tipo, p, qtd, 'Estoque inicial'); }
+          if (tipo === 'produto') Object.assign(p, { tipoProduto: f.tipoProduto, seminovo: f.tipoProduto === 'seminovo', imei: f.imei, cor: f.cor, armazenamento: f.armazenamento, bateria: f.bateria, condicao: f.condicao, statusAparelho: f.statusAparelho || 'disponivel', garantiaDias: f.tipoProduto === 'seminovo' ? GARANTIA_SEMINOVO_DIAS : parseInt(f.garantiaDias) || 0 });
+          if (!id) { p.id = uid(); p.criadoEm = p.entradaEm = nowISO(); p.qtd = 0; col.push(p); if (qtd) Store.movimentar(tipo, p, qtd, 'Estoque inicial'); }
           else { const i = col.findIndex(x => x.id === id); const diff = qtd - col[i].qtd; p.qtd = col[i].qtd; col[i] = p; if (diff) Store.movimentar(tipo, p, diff, 'Ajuste na edição'); }
           Store.save(); m.close(); App.refresh(); toast(`${lbl} salvo`);
         };
@@ -152,7 +153,7 @@ const EstoquePage = {
             Store.movimentar(tipo, p, q, 'Entrada em lote' + (ref ? ' — ' + ref : '')); total += q * p.custo; n++;
           });
           if (!n) return toast('Informe alguma quantidade', true);
-          if ($('#lt-desp', el).checked && total > 0) Store.addDespesa({ desc: `Compra de ${tipo === 'peca' ? 'peças' : 'produtos'}${ref ? ' — ' + ref : ''}`, valor: total, categoria: 'Compra de estoque' });
+          if ($('#lt-desp', el).checked && total > 0) Store.addDespesa({ desc: `Compra de ${tipo === 'peca' ? 'peças' : 'produtos'}${ref ? ' — ' + ref : ''}`, valor: total, categoria: 'Compra de estoque', estoque: true });
           Store.save(); m.close(); App.refresh(); toast(`${n} item(ns) atualizado(s)`);
         };
       },

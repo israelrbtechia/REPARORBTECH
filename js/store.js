@@ -10,6 +10,8 @@ const OS_STATUS = {
   interrompido: { label: 'Interrompido',  icon: 'xCircle',     color: '#f87171', pill: 'red' },
 };
 const OS_ATIVOS = ['analise', 'peca', 'servico', 'concluido'];
+// Nome da forma de pagamento, incluindo o aparelho recebido na troca
+const nomeForma = f => FORMAS_PGTO[f] || (f === 'troca' ? 'Aparelho na troca' : f || '');
 // Garantias fixas da loja
 const GARANTIA_REPARO_DIAS = 90;    // reparos: sempre 3 meses
 const GARANTIA_SEMINOVO_DIAS = 180; // aparelhos seminovos: sempre 6 meses
@@ -171,25 +173,28 @@ const Store = {
     const l = { id: uid(), tipo: 'receita', origem, refId, desc, valor, custo, taxa: this.taxa(forma, valor), forma, data, categoria: categoria || (origem === 'os' ? 'Serviços' : origem === 'venda' ? 'Vendas' : 'Outros'), caixaId: cx ? cx.id : null };
     this.db.lancamentos.push(l); return l;
   },
-  addDespesa({ desc, valor, forma = 'dinheiro', data = nowISO(), categoria = 'Despesas gerais' }) {
+  // estoque = compra de mercadoria/aparelho: sai do caixa, mas o custo só entra no lucro quando o item é vendido
+  addDespesa({ desc, valor, forma = 'dinheiro', data = nowISO(), categoria = 'Despesas gerais', estoque = false }) {
     const cx = this.caixaAberto();
-    const l = { id: uid(), tipo: 'despesa', origem: 'manual', desc, valor, custo: 0, taxa: 0, forma, data, categoria, caixaId: cx ? cx.id : null };
+    const l = { id: uid(), tipo: 'despesa', origem: 'manual', desc, valor, custo: 0, taxa: 0, forma, data, categoria, estoque, caixaId: cx ? cx.id : null };
     this.db.lancamentos.push(l); this.log('Despesa', `${desc} ${money(valor)}`); this.save(); return l;
   },
   resumo(filtro) {
     const ls = this.db.lancamentos.filter(filtro);
-    const r = { receita: 0, custo: 0, taxa: 0, despesa: 0, os: 0, vendas: 0, qtd: ls.length };
+    const r = { receita: 0, custo: 0, taxa: 0, despesa: 0, compras: 0, os: 0, vendas: 0, qtd: ls.length };
     for (const l of ls) {
       if (l.tipo === 'receita') {
         r.receita += l.valor; r.custo += l.custo || 0; r.taxa += l.taxa || 0;
         if (l.origem === 'os') r.os += l.valor; else if (l.origem === 'venda') r.vendas += l.valor;
-      } else r.despesa += l.valor;
+      } else if (this.ehCompraEstoque(l)) r.compras += l.valor;
+      else r.despesa += l.valor;
     }
     r.custos = r.custo + r.taxa + r.despesa;
     r.lucro = r.receita - r.custos;
     r.margem = r.receita ? (r.lucro / r.receita) * 100 : 0;
     return r;
   },
+  ehCompraEstoque(l) { return l.estoque || /^Compra de (estoque|aparelhos)$/.test(l.categoria || ''); },
   resumoDia(d = new Date()) { const k = dayKey(d); return this.resumo(l => dayKey(l.data) === k); },
   resumoMes(d = new Date()) { const k = monthKey(d); return this.resumo(l => monthKey(l.data) === k); },
   metaDiaria() { return (Number(this.s.metaMensal) || 0) / (Number(this.s.diasTrabalho) || 26); },

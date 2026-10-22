@@ -71,7 +71,7 @@ const VendasPage = {
       return `<div class="prod-card" onclick="VendasPage.add('${p.id}')" style="${inCart ? 'border-color:var(--gold)' : ''}">
         <div class="row between"><span class="xs muted ellipsis">${esc(p.categoria || '')}</span><button class="icon-btn" style="width:30px;height:30px" onclick="event.stopPropagation();EstoquePage.editar('produto','${p.id}')">${icon('edit', 'sm')}</button></div>
         <b style="line-height:1.25">${esc(p.nome)}</b>
-        ${ehCelular(p) ? `<div class="row wrap" style="gap:4px">${p.seminovo ? '<span class="pill gold xs">Seminovo · 6 meses</span>' : '<span class="pill green xs">Novo</span>'}${p.armazenamento ? `<span class="pill xs">${esc(p.armazenamento)}</span>` : ''}${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei || p.cor ? `<div class="xs muted ellipsis">${[p.cor, p.imei && 'IMEI ' + p.imei].filter(Boolean).map(esc).join(' · ')}</div>` : ''}` : '<span class="pill xs" style="align-self:flex-start">Acessório</span>'}
+        ${ehCelular(p) ? `<div class="row wrap" style="gap:4px">${p.seminovo ? '<span class="pill gold xs">Seminovo · 6 meses</span>' : '<span class="pill green xs">Novo</span>'}${p.statusAparelho && p.statusAparelho !== 'disponivel' && STATUS_AP[p.statusAparelho] ? `<span class="pill ${STATUS_AP[p.statusAparelho][1]} xs">${STATUS_AP[p.statusAparelho][0]}</span>` : ''}${p.armazenamento ? `<span class="pill xs">${esc(p.armazenamento)}</span>` : ''}${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei || p.cor ? `<div class="xs muted ellipsis">${[p.cor, p.imei && 'IMEI ' + p.imei].filter(Boolean).map(esc).join(' · ')}</div>` : ''}` : '<span class="pill xs" style="align-self:flex-start">Acessório</span>'}
         <div class="gold bold" style="font-size:18px">${money(p.preco)}</div>
         <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span>${inCart ? `<span class="pill gold xs">${inCart} no carrinho</span>` : ''}</div>
       </div>`;
@@ -162,11 +162,18 @@ const VendasPage = {
     const c = v.clienteId && Store.cliente(v.clienteId);
     openModal({
       title: 'Venda concluída!', icon: 'checkCircle', subtitle: `Venda #${v.numero} · ${money(v.total)}`,
-      body: `<div class="center"><div class="gold bold" style="font-size:34px">${money(v.total)}</div><p class="muted">${FORMAS_PGTO[v.forma]} · ${v.itens.length} item(ns)</p></div>${this.garantiasHTML(v)}`,
+      body: `<div class="center"><div class="gold bold" style="font-size:34px">${money(v.total)}</div><p class="muted">${FORMAS_PGTO[v.forma]} · ${v.itens.length} item(ns)</p></div>${this.trocaHTML(v)}${this.garantiasHTML(v)}`,
       foot: `<button class="btn primary" onclick="VendasPage.reciboPdf('${v.id}', true)">${icon('upload')} Recibo (PDF)</button><button class="btn" onclick="VendasPage.reciboPdf('${v.id}')">${icon('download')}</button>
         ${c?.telefone ? `<a class="btn success" target="_blank" href="${waLink(c.telefone, `Olá ${c.nome.split(' ')[0]}! Obrigado pela compra na ${Store.s.loja}! 🛍️\n\n${v.itens.map(i => `• ${i.nome} x${i.qtd}: ${money(i.preco * i.qtd)}`).join('\n')}\n\n*Total: ${money(v.total)}*`)}">${icon('whatsapp')} WhatsApp</a>` : ''}
         <button class="btn" data-close>Fechar</button>`,
     });
+  },
+
+  trocaHTML(v) {
+    if (!v.troca) return '';
+    return `<div class="card mb" style="border-color:rgba(192,132,252,.45)"><b>${icon('repeat', 'sm')} Aparelho recebido na troca</b>
+      <div class="kv"><span class="k">${esc(v.troca.nome)}${v.troca.imei ? ' · IMEI ' + esc(v.troca.imei) : ''}</span><span class="v red" style="white-space:nowrap">-${money(v.troca.valor)}</span></div>
+      <div class="kv"><span class="k">${v.pago >= 0 ? 'Cliente pagou' : 'Loja devolveu'} (${FORMAS_PGTO[v.forma]})</span><span class="v gold">${money(Math.abs(v.pago))}</span></div></div>`;
   },
 
   // Recibo em PDF (com termos de garantia); no celular abre o compartilhar (WhatsApp)
@@ -213,7 +220,7 @@ const VendasPage = {
     const c = v.clienteId && Store.cliente(v.clienteId);
     openModal({
       title: `Venda #${v.numero}`, subtitle: fmtDateTime(v.data), icon: 'bag',
-      body: `${c ? `<p>Cliente: <b>${esc(c.nome)}</b></p>` : v.clienteNome ? `<p>Comprador: <b>${esc(v.clienteNome)}</b></p>` : ''}${this.garantiasHTML(v)}<div class="card">${v.itens.map(i => `<div class="kv"><span class="k">${i.qtd}x ${esc(i.nome)}</span><span class="v">${money(i.preco * i.qtd)}</span></div>`).join('')}
+      body: `${c ? `<p>Cliente: <b>${esc(c.nome)}</b></p>` : v.clienteNome ? `<p>Comprador: <b>${esc(v.clienteNome)}</b></p>` : ''}${this.trocaHTML(v)}${this.garantiasHTML(v)}<div class="card">${v.itens.map(i => `<div class="kv"><span class="k">${i.qtd}x ${esc(i.nome)}</span><span class="v">${money(i.preco * i.qtd)}</span></div>`).join('')}
         ${v.desconto ? `<div class="kv"><span class="k">Desconto</span><span class="v red">-${money(v.desconto)}</span></div>` : ''}
         <div class="kv"><span class="k bold">Total · ${FORMAS_PGTO[v.forma]}</span><span class="v gold" style="font-size:20px">${money(v.total)}</span></div></div>`,
       foot: `<button class="btn primary" onclick="VendasPage.reciboPdf('${v.id}', true)">${icon('upload')} Recibo (PDF)</button><button class="btn" onclick="VendasPage.reciboPdf('${v.id}')">${icon('download')}</button>
@@ -226,6 +233,10 @@ const VendasPage = {
     if (!(await confirmDialog(`Cancelar a venda #${v.numero}? Os produtos voltam ao estoque e o valor sai do financeiro.`, { danger: true, ok: 'Cancelar venda' }))) return;
     v.cancelada = true;
     v.itens.forEach(i => { const p = !i.avulso && Store.produto(i.id); if (p) Store.movimentar('produto', p, i.qtd, `Cancelamento venda #${v.numero}`); });
+    // aparelho recebido na troca sai do estoque (volta para o cliente)
+    const tp = v.troca && Store.produto(v.troca.produtoId);
+    if (tp && tp.qtd > 0) { Store.movimentar('produto', tp, -tp.qtd, `Troca desfeita · venda #${v.numero}`); tp.deleted = true; }
+    Store.db.lancamentos = Store.db.lancamentos.filter(l => !(l.tipo === 'despesa' && l.desc === `Diferença devolvida na troca · Venda #${v.numero}`));
     Store.db.lancamentos = Store.db.lancamentos.filter(l => !(l.origem === 'venda' && l.refId === v.id));
     Store.log('Venda cancelada', `#${v.numero}`); Store.save(); closeAllModals(); App.refresh(); toast('Venda cancelada');
   },
