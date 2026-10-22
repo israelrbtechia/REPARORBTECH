@@ -258,6 +258,8 @@ const Cloud = {
     const local = this.localMap();
     const pend = fresh ? new Set() : new Set([...local].filter(([k, v]) => this.snap[k] !== hash(v.str)).map(([k]) => k));
     if (!this.ehDono()) pend.delete('meta:settings'); // configurações sempre vêm do dono
+    // apagados neste aparelho que ainda não subiram: não podem voltar com o download
+    if (!fresh) for (const k of Object.keys(this.snap)) if (!local.has(k) && !k.startsWith('meta:')) pend.add(k);
     const seen = new Set();
     let mudou = 0;
     for (const r of rows) {
@@ -270,7 +272,7 @@ const Cloud = {
     }
     // registros que sumiram do servidor (apagados em outro aparelho)
     for (const [k, v] of local) if (!seen.has(k) && v.col !== 'meta' && !pend.has(k) && k in this.snap) { this.removeLocal(v.col, v.id); mudou++; }
-    for (const k of Object.keys(this.snap)) if (!seen.has(k)) delete this.snap[k];
+    for (const k of Object.keys(this.snap)) if (!seen.has(k) && !pend.has(k)) delete this.snap[k];
     if (mudou) this.afterRemote();
     this.saveSnap();
     if (pend.size) this.schedule(0); else this.setStatus('ok');

@@ -465,6 +465,7 @@ const VendasPage = {
         <div class="price" style="${v.cancelada ? 'text-decoration:line-through;opacity:.5' : ''}">${money(v.total)}</div></div></div>`).join('') || `<div class="empty">${icon('history')}<div>Nenhuma venda ainda.</div></div>`}</div>`;
   },
 
+  abrirVenda(id) { if (Store.db.vendas.some(x => x.id === id)) this.detalheVenda(id); else App.go('financeiro'); },
   detalheVenda(id) {
     const v = Store.db.vendas.find(x => x.id === id);
     const c = v.clienteId && Store.cliente(v.clienteId);

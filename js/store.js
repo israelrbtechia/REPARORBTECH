@@ -179,8 +179,13 @@ const Store = {
     const l = { id: uid(), tipo: 'despesa', origem: 'manual', desc, valor, custo: 0, taxa: 0, forma, data, categoria, estoque, caixaId: cx ? cx.id : null };
     this.db.lancamentos.push(l); this.log('Despesa', `${desc} ${money(valor)}`); this.save(); return l;
   },
+  // lançamentos válidos: receita de venda cancelada não conta (mesmo que o lançamento tenha ficado para trás)
+  lancs() {
+    const canc = new Set(this.db.vendas.filter(v => v.cancelada || v.deleted).map(v => v.id));
+    return canc.size ? this.db.lancamentos.filter(l => !(l.origem === 'venda' && canc.has(l.refId))) : this.db.lancamentos;
+  },
   resumo(filtro) {
-    const ls = this.db.lancamentos.filter(filtro);
+    const ls = this.lancs().filter(filtro);
     const r = { receita: 0, custo: 0, taxa: 0, despesa: 0, compras: 0, os: 0, vendas: 0, qtd: ls.length };
     for (const l of ls) {
       if (l.tipo === 'receita') {

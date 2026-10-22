@@ -16,11 +16,11 @@ const FinPage = {
     const [de, ate] = this.range();
     const inRange = l => { const k = dayKey(l.data); return k >= de && k <= ate; };
     const r = Store.resumo(inRange);
-    const ls = Store.db.lancamentos.filter(l => inRange(l) && (!this.st.tipo || l.tipo === this.st.tipo)).sort((a, b) => b.data.localeCompare(a.data));
+    const ls = Store.lancs().filter(l => inRange(l) && (!this.st.tipo || l.tipo === this.st.tipo)).sort((a, b) => b.data.localeCompare(a.data));
     const porForma = {};
-    Store.db.lancamentos.filter(l => inRange(l) && l.tipo === 'receita').forEach(l => porForma[l.forma] = (porForma[l.forma] || 0) + l.valor);
+    Store.lancs().filter(l => inRange(l) && l.tipo === 'receita').forEach(l => porForma[l.forma] = (porForma[l.forma] || 0) + l.valor);
     const porCat = {};
-    Store.db.lancamentos.filter(l => inRange(l) && l.tipo === 'despesa').forEach(l => porCat[l.categoria] = (porCat[l.categoria] || 0) + l.valor);
+    Store.lancs().filter(l => inRange(l) && l.tipo === 'despesa').forEach(l => porCat[l.categoria] = (porCat[l.categoria] || 0) + l.valor);
     const aReceber = Store.db.os.filter(o => !o.deleted && OS_ATIVOS.includes(o.status)).reduce((s, o) => s + Store.osTotal(o), 0);
 
     main.innerHTML = `
@@ -93,7 +93,7 @@ const FinPage = {
   exportar() {
     const [de, ate] = this.range();
     const rows = [['Data', 'Tipo', 'Descrição', 'Categoria', 'Forma', 'Valor', 'Custo', 'Taxa']];
-    Store.db.lancamentos.filter(l => { const k = dayKey(l.data); return k >= de && k <= ate; }).sort((a, b) => a.data.localeCompare(b.data))
+    Store.lancs().filter(l => { const k = dayKey(l.data); return k >= de && k <= ate; }).sort((a, b) => a.data.localeCompare(b.data))
       .forEach(l => rows.push([fmtDateTime(l.data), l.tipo, l.desc, l.categoria, nomeForma(l.forma), moneyInput(l.valor), moneyInput(l.custo), moneyInput(l.taxa)]));
     download(`financeiro-${de}-a-${ate}.csv`, toCSV(rows), 'text/csv;charset=utf-8');
   },

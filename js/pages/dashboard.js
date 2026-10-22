@@ -31,6 +31,7 @@ Pages.dashboard = {
           <div>
             <div class="stat label" style="padding:0;border:0;background:none">Faturamento hoje</div>
             <div class="big">${money(hoje.receita)}</div>
+            <button class="btn sm ghost" style="padding:4px 0;margin-top:2px" onclick="Pages.dashboard.detalheHoje()">${icon('eye', 'sm')} Ver o que entrou hoje</button>
           </div>
           <div class="right">
             <div class="small muted">Meta diária</div>
@@ -91,6 +92,24 @@ Pages.dashboard = {
           ${recentes.length ? recentes.map(o => this.osMini(o)).join('') : `<div class="empty">${icon('file')}<div>Nenhuma OS ainda.</div><button class="btn primary mt" onclick="OSPage.novaOS()">${icon('plus')} Criar primeira OS</button></div>`}
         </div>
       </div>`;
+  },
+  // Lista os lançamentos que formam o faturamento e as saídas de hoje
+  detalheHoje() {
+    const k = dayKey(), ls = Store.lancs().filter(l => dayKey(l.data) === k).sort((a, b) => String(b.data).localeCompare(String(a.data)));
+    const rec = ls.filter(l => l.tipo === 'receita'), des = ls.filter(l => l.tipo !== 'receita');
+    const abrir = l => l.origem === 'venda' ? `VendasPage.abrirVenda('${l.refId}')` : l.origem === 'os' ? `OSPage.detalhe('${l.refId}')` : `App.go('financeiro')`;
+    const extra = l => { if (l.origem === 'venda') { const v = Store.db.vendas.find(x => x.id === l.refId); return v ? v.itens.map(i => i.nome).join(', ') : ''; } if (l.origem === 'os') { const o = Store.db.os.find(x => x.id === l.refId); return o ? `${Store.cliente(o.clienteId)?.nome || ''} · ${o.aparelho?.modelo || ''}` : ''; } return ''; };
+    const linha = l => `<div class="cart-line" style="cursor:pointer" onclick="closeAllModals();${abrir(l)}"><div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(l.desc || l.categoria || '—')}</b>${extra(l) ? `<div class="small ellipsis">${esc(extra(l))}</div>` : ''}
+      <div class="xs muted">${new Date(l.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${esc(nomeForma(l.forma))}${l.origem ? ' · ' + esc(l.origem === 'os' ? 'OS' : l.origem === 'venda' ? 'Venda' : 'Manual') : ''}</div></div>
+      <b class="${l.tipo === 'receita' ? 'green' : 'red'}" style="white-space:nowrap">${l.tipo === 'receita' ? '' : '-'}${money(l.valor)}</b></div>`;
+    openModal({
+      title: 'Movimento de hoje', icon: 'dollar',
+      body: `<div class="kv"><span class="k">Entradas (${rec.length})</span><span class="v green">${money(rec.reduce((s, l) => s + l.valor, 0))}</span></div>
+        ${rec.map(linha).join('') || '<p class="small muted">Nada entrou hoje.</p>'}
+        ${des.length ? `<div class="kv mt"><span class="k">Saídas (${des.length})</span><span class="v red">-${money(des.reduce((s, l) => s + l.valor, 0))}</span></div>${des.map(linha).join('')}` : ''}
+        <p class="xs muted mt">Para tirar uma venda do faturamento: Vendas → Histórico → abrir a venda → <b>Cancelar venda</b>. Lançamentos manuais se apagam no Financeiro.</p>`,
+      foot: `<button class="btn primary block" onclick="closeAllModals();App.go('financeiro')">${icon('chart')} Abrir financeiro</button>`,
+    });
   },
   osMini(o) {
     const c = Store.cliente(o.clienteId);
