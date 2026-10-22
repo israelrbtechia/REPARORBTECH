@@ -48,6 +48,8 @@ const Cloud = {
       if (ev === 'PASSWORD_RECOVERY') { this.recovery = true; if ($('#app').children.length) setTimeout(() => App.checkRecovery(), 0); }
     });
     addEventListener('online', () => this.schedule(0));
+    // ao sair do app (ex.: abrir o WhatsApp) envia na hora o que ficou pendente; ao voltar, atualiza
+    document.addEventListener('visibilitychange', () => { if (!this.loja) return; if (document.hidden) this.push().catch(() => {}); else this.pull().catch(() => {}); });
     addEventListener('offline', () => this.setStatus('offline'));
   },
 

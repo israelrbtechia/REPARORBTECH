@@ -108,7 +108,7 @@ Pages.posvenda = {
         ${Cloud.ehDono() ? `<div class="row wrap mt">${(fb ? [['feedbackReparo', 'Mensagem p/ reparo'], ['feedbackCompra', 'Mensagem p/ compra de celular']] : [['oferta', 'Personalizar mensagem']])
           .map(([k, l]) => `<button class="btn sm outline-gold" onclick="Pages.posvenda.editarMsg('${k}')">${icon(MSG_MODELOS[k].icone, 'sm')} ${l}</button>`).join('')}</div>` : ''}
       </div>
-      <div class="card pad-0 mb"><div class="list-head"><b>${lista.length} cliente(s) para ${fb ? 'pedir feedback' : 'oferecer capa/película'}</b></div>
+      <div class="card pad-0 mb"><div class="list-head"><b>${lista.length} cliente(s) para ${fb ? 'pedir feedback' : 'oferecer capa/película'}</b>${(() => { const n = PosVenda.compras().filter(x => { const v = PosVenda.estado(x.ref)[tipo]; return v && v !== 'pulado' && dayKey(v) === dayKey(); }).length; return n ? `<span class="pill green">✓ ${n} enviado${n > 1 ? 's' : ''} hoje</span>` : ''; })()}</div>
       ${lista.map(x => {
         const c = x.cliente, n = c?.nome || x.nomeAvulso || 'Cliente sem cadastro';
         return `<div class="item" style="cursor:default"><div class="row">
@@ -118,7 +118,7 @@ Pages.posvenda = {
             <span class="pill xs ${x.tipo === 'os' ? 'purple' : 'gold'}" style="margin:3px 0">${x.tipo === 'os' ? 'Reparo' : 'Compra de celular'}</span>
             <div class="xs muted">${x.titulo} · há ${x.dias} dias (${fmtDate(x.data)})</div></div>
           <div class="col" style="gap:6px;align-items:flex-end">
-            ${c?.telefone ? `<button class="btn sm success" onclick="Pages.posvenda.enviar('${tipo}','${x.key}')">${icon('whatsapp', 'sm')} Enviar</button>`
+            ${c?.telefone ? `<a class="btn sm success" target="_blank" rel="noopener" href="${esc(waLink(c.telefone, PosVenda.mensagem(tipo, x)))}" onclick="Pages.posvenda.enviado('${tipo}','${x.key}')">${icon('whatsapp', 'sm')} Enviar</a>`
               : c ? `<button class="btn sm outline-gold" onclick="Pages.posvenda.addTelefone('${c.id}')">${icon('plus', 'sm')} WhatsApp</button>` : '<span class="xs muted">sem cadastro</span>'}
             <button class="btn sm ghost" style="min-height:28px;padding:2px 8px" onclick="Pages.posvenda.marcar('${tipo}','${x.key}','pulado')">Pular</button>
           </div></div></div>`;
@@ -130,12 +130,19 @@ Pages.posvenda = {
 
   achar(key) { return PosVenda.compras().find(x => x.key === key); },
 
-  // Um clique: abre o WhatsApp com a mensagem e tira o cliente da lista
+  // Um clique: o link abre o WhatsApp com a mensagem e o cliente já conta como enviado
+  // (marca e salva na nuvem na hora, antes do celular trocar para o WhatsApp)
+  enviado(tipo, key) {
+    const x = this.achar(key); if (!x) return;
+    const st = PosVenda.estado(x.ref); st[tipo] = nowISO(); x.ref.posVenda = st;
+    Store.save(true); Cloud.schedule?.(0);
+    toast(`${tipo === 'feedback' ? 'Feedback' : 'Oferta'} enviado para ${(x.cliente?.nome || '').split(' ')[0]} ✓`);
+    setTimeout(() => App.refresh(), 400); // deixa o link abrir antes de redesenhar a lista
+  },
   enviar(tipo, key) {
     const x = this.achar(key); if (!x) return;
+    this.enviado(tipo, key);
     window.open(waLink(x.cliente.telefone, PosVenda.mensagem(tipo, x)), '_blank');
-    this.marcar(tipo, key, nowISO(), true);
-    toast(`${tipo === 'feedback' ? 'Feedback' : 'Oferta'} enviado para ${x.cliente.nome.split(' ')[0]}`);
   },
   marcar(tipo, key, valor, silencioso) {
     const x = this.achar(key); if (!x) return;

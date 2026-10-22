@@ -1,7 +1,7 @@
 /* Shell do app: login, menu lateral e roteamento */
 const SESSION_KEY = 'rbtech_session';
 
-const APP_VERSAO = '24';
+const APP_VERSAO = '25';
 const NAV = [
   ['Gestão Operacional', [
     ['dashboard', 'Dashboard', 'dash'],
