@@ -61,10 +61,11 @@ function dropdown(anchor, items, onPick) {
   dd.style.top = top + 'px'; dd.style.left = left + 'px';
   dd.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; closeDropdown(); onPick(items[+b.dataset.i]); });
   setTimeout(() => document.addEventListener('click', closeDropdown, { once: true }), 0);
-  window._dd = dd;
+  window._dd = dd; dd._y = scrollY;
 }
 function closeDropdown() { if (window._dd) { window._dd.remove(); window._dd = null; } }
-addEventListener('scroll', closeDropdown, true);
+// fecha o menu só quando a página rolou de verdade (pequenos ajustes não contam)
+addEventListener('scroll', () => { if (window._dd && Math.abs(scrollY - window._dd._y) > 40) closeDropdown(); }, true);
 
 function pageHead(ic, title, sub) {
   return `<div class="page-head"><div class="page-icon">${icon(ic)}</div><div><h1>${esc(title)}</h1>${sub ? `<p>${sub}</p>` : ''}</div></div>`;

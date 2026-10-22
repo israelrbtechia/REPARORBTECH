@@ -170,9 +170,26 @@ Pages.config = {
         <p class="xs muted">Último backup: ${s.ultimoBackup ? fmtDateTime(s.ultimoBackup) : 'nunca'}</p>
       </div>
 
+      ${Cloud.enabled && Cloud.loja ? `<div class="card mb" id="cf-equipe">
+        <h3>${icon('users', 'sm')} Equipe e <span class="gold">nuvem</span></h3>
+        <p class="small muted" style="margin-top:0">Os dados ficam salvos no Supabase e sincronizam em tempo real entre todos os aparelhos da equipe.</p>
+        <div class="kv"><span class="k">Loja</span><span class="v">${esc(Cloud.loja.nome)}</span></div>
+        <div class="kv"><span class="k">Seu acesso</span><span class="v">${Cloud.loja.papel === 'dono' ? '<span class="gold">Dono</span>' : 'Funcionário'}</span></div>
+        <div class="kv"><span class="k">Sincronização</span><span class="v">${{ ok: '<span class="green">Em dia</span>', sync: 'Sincronizando...', offline: '<span class="red">Sem internet</span>', erro: '<span class="red">Erro</span>' }[Cloud.status] || '—'}</span></div>
+        <div class="card mt" style="background:var(--gold-soft);border-color:rgba(212,175,55,.4)">
+          <div class="lbl">Código de convite</div>
+          <div class="row between"><b class="gold" style="font-size:26px;letter-spacing:.2em">${esc(Cloud.loja.codigo_convite || '—')}</b>
+          <button class="btn sm" onclick="navigator.clipboard?.writeText('${esc(Cloud.loja.codigo_convite)}');toast('Código copiado')">Copiar</button></div>
+          <div class="xs muted">O funcionário cria a conta dele no app e digita este código para entrar na equipe.</div>
+          ${Cloud.loja.papel === 'dono' ? `<button class="btn sm ghost mt" onclick="Pages.config.novoCodigo()">${icon('repeat', 'sm')} Gerar novo código</button>` : ''}
+        </div>
+        <div class="lbl mt mb">Membros</div><div id="cf-membros"><p class="small muted">Carregando...</p></div>
+        <button class="btn block mt" onclick="App.syncAgora()">${icon('repeat')} Sincronizar agora</button>
+      </div>` : ''}
+
       <div class="card mb">
         <h3>${icon('lock', 'sm')} Acesso</h3>
-        <div class="kv"><span class="k">E-mail</span><span class="v">${esc(Store.db.auth.email)}</span></div>
+        <div class="kv"><span class="k">E-mail</span><span class="v">${esc(App.userEmail())}</span></div>
         <div class="grid grid-2 mt"><button class="btn" onclick="Pages.config.senha()">${icon('lock')} Alterar senha</button><button class="btn" onclick="Pages.config.auditoria()">${icon('shield')} Auditoria</button></div>
         <button class="btn block mt" onclick="App.logout()">${icon('logout')} Sair</button>
       </div>
@@ -198,6 +215,26 @@ Pages.config = {
     $$('[data-ro]').forEach(b => b.onclick = () => { s.origens.splice(+b.dataset.ro, 1); Store.save(); App.refresh(); });
     $('#cf-oadd').onclick = () => { const n = $('#cf-onome').value.trim(); if (!n) return; s.origens.push(n); Store.save(); App.refresh(); };
     $('#cf-restore').onchange = e => this.restaurar(e.target.files[0]);
+    if ($('#cf-membros')) this.renderMembros();
+  },
+
+  async renderMembros() {
+    const box = $('#cf-membros');
+    try {
+      const ms = await Cloud.membros();
+      const dono = Cloud.loja.papel === 'dono';
+      box.innerHTML = ms.map(m => `<div class="cart-line"><div class="avatar">${esc((m.email || '?')[0].toUpperCase())}</div>
+        <div class="grow"><b class="ellipsis" style="display:block">${esc(m.email || 'Sem e-mail')}${m.user_id === Cloud.user.id ? ' <span class="muted xs">(você)</span>' : ''}</b><div class="xs ${m.papel === 'dono' ? 'gold' : 'muted'}">${m.papel === 'dono' ? 'Dono' : 'Funcionário'} · desde ${fmtDate(m.criado_em)}</div></div>
+        ${dono && m.papel !== 'dono' ? `<button class="icon-btn" title="Remover da equipe" data-rm="${m.user_id}">${icon('trash', 'sm')}</button>` : ''}</div>`).join('');
+      $$('[data-rm]', box).forEach(b => b.onclick = async () => {
+        if (!(await confirmDialog('Remover este funcionário da equipe? Ele perde o acesso aos dados da loja.', { danger: true, ok: 'Remover' }))) return;
+        try { await Cloud.removerMembro(b.dataset.rm); toast('Removido da equipe'); this.renderMembros(); } catch (e) { toast(e.message, true); }
+      });
+    } catch (e) { box.innerHTML = `<p class="small red">Não foi possível carregar (sem internet?).</p>`; }
+  },
+  async novoCodigo() {
+    if (!(await confirmDialog('Gerar um novo código? O código atual deixa de funcionar (quem já está na equipe continua).', { ok: 'Gerar' }))) return;
+    try { await Cloud.novoCodigo(); App.cacheLoja(); App.refresh(); } catch (e) { toast(e.message, true); }
   },
 
   assinar(tec, done) {
@@ -231,24 +268,33 @@ Pages.config = {
       try {
         const d = JSON.parse(rd.result);
         if (!d.os || !d.clientes || !d.settings) throw new Error('arquivo inválido');
-        if (!(await confirmDialog(`Restaurar backup com ${d.os.length} OS e ${d.clientes.length} clientes? Os dados atuais deste aparelho serão substituídos.`, { danger: true, ok: 'Restaurar' }))) return;
-        d.auth = Store.db.auth;
-        localStorage.setItem(DB_KEY, JSON.stringify(d)); Store.load();
+        if (!(await confirmDialog(`Restaurar backup com ${d.os.length} OS e ${d.clientes.length} clientes? Os dados atuais ${Cloud.loja ? 'da loja (em todos os aparelhos da equipe)' : 'deste aparelho'} serão substituídos.`, { danger: true, ok: 'Restaurar' }))) return;
+        d.auth = Store.db.auth; d.lojaId = Store.db.lojaId;
+        localStorage.setItem(DB_KEY, JSON.stringify(d)); Store.load(); Store.save();
         toast('Backup restaurado'); $('.shell')?.remove(); App.render();
       } catch (e) { toast('Não foi possível ler o backup: ' + e.message, true); }
     };
     rd.readAsText(file);
   },
-  senha() {
+  // recovery = veio do link "esqueci a senha" do e-mail
+  senha(recovery = false) {
+    const nuvem = Cloud.enabled;
     openModal({
-      title: 'Alterar senha', icon: 'lock',
-      body: `${field('Senha atual', '<input class="input" type="password" id="pw-a">')}${field('Nova senha', '<input class="input" type="password" id="pw-n" minlength="4">')}${field('Confirmar nova senha', '<input class="input" type="password" id="pw-c">')}`,
+      title: recovery ? 'Defina sua nova senha' : 'Alterar senha', icon: 'lock',
+      body: `${nuvem ? '' : field('Senha atual', '<input class="input" type="password" id="pw-a">')}${field('Nova senha', '<input class="input" type="password" id="pw-n">')}${field('Confirmar nova senha', '<input class="input" type="password" id="pw-c">')}`,
       foot: `<button class="btn" data-close>Cancelar</button><button class="btn primary" id="pw-ok">Salvar</button>`,
       onMount: (el, m) => $('#pw-ok', el).onclick = async () => {
-        if ((await sha256($('#pw-a', el).value)) !== Store.db.auth.hash) return toast('Senha atual incorreta', true);
-        const n = $('#pw-n', el).value; if (n.length < 4) return toast('Mínimo de 4 caracteres', true);
+        const n = $('#pw-n', el).value, min = nuvem ? 6 : 4;
+        if (n.length < min) return toast(`Mínimo de ${min} caracteres`, true);
         if (n !== $('#pw-c', el).value) return toast('As senhas não conferem', true);
-        Store.db.auth.hash = await sha256(n); Store.save(); m.close(); toast('Senha alterada');
+        if (nuvem) {
+          try { await Cloud.novaSenha(n); } catch (e) { return toast(e.message, true); }
+        } else {
+          if ((await sha256($('#pw-a', el).value)) !== Store.db.auth.hash) return toast('Senha atual incorreta', true);
+          Store.db.auth.hash = await sha256(n); Store.save();
+        }
+        m.close(); toast('Senha alterada');
+        if (recovery && Cloud.user && !Cloud.loja) { await App.bootCloud(); App.render(); }
       },
     });
   },
@@ -259,9 +305,9 @@ Pages.config = {
     });
   },
   async zerar() {
-    if (!(await confirmDialog('Apagar TODOS os dados (OS, clientes, estoque, financeiro)? Faça um backup antes. Esta ação não pode ser desfeita.', { danger: true, ok: 'Apagar tudo' }))) return;
+    if (!(await confirmDialog(`Apagar TODOS os dados (OS, clientes, estoque, financeiro)${Cloud.loja ? ' da loja, inclusive na nuvem e nos aparelhos da equipe' : ''}? Faça um backup antes. Esta ação não pode ser desfeita.`, { danger: true, ok: 'Apagar tudo' }))) return;
     if (!(await confirmDialog('Tem certeza absoluta?', { danger: true, ok: 'Sim, apagar' }))) return;
-    const auth = Store.db.auth; Store.db = defaultDB(); Store.db.auth = auth; Store.save();
+    const { auth, lojaId } = Store.db; Store.db = defaultDB(); Store.db.auth = auth; Store.db.lojaId = lojaId; Store.save();
     toast('Dados apagados'); $('.shell')?.remove(); App.render();
   },
 };

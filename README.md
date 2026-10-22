@@ -31,4 +31,18 @@ python3 -m http.server 8000
 # abra http://localhost:8000
 ```
 
-> Os dados ficam salvos no próprio aparelho (navegador). Use **Configurações → Baixar backup** com frequência e restaure o arquivo para levar os dados a outro aparelho.
+## Nuvem (Supabase)
+Com o Supabase ligado, os dados ficam na nuvem e sincronizam **em tempo real** entre celular, computador e funcionários. O app continua funcionando sem internet: salva no aparelho e envia quando a conexão volta.
+
+1. Crie um projeto grátis em [supabase.com](https://supabase.com).
+2. No projeto, abra **SQL Editor → New query**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
+3. Em **Project Settings → API**, copie a **Project URL** e a chave **anon public** e cole em [`js/config.js`](js/config.js).
+4. Em **Authentication → URL Configuration**, coloque o endereço do app na Vercel em **Site URL** (ex.: `https://reparorbtech.vercel.app`). É para onde vão os links de confirmação de e-mail e de "esqueci a senha".
+5. Faça o commit/push — a Vercel publica sozinha.
+
+No primeiro acesso: **Criar conta → Criar minha loja**. Se o aparelho já tiver dados salvos (modo local), o app oferece enviá-los para a nuvem.
+Funcionários: criam a própria conta no app e entram com o **código de convite** mostrado em **Configurações → Equipe e nuvem**. O dono pode remover funcionários e gerar um novo código.
+
+Segurança: cada loja só enxerga os próprios dados (Row Level Security no Postgres). A chave *anon* é pública por natureza e pode ficar no código.
+
+Sem `js/config.js` preenchido, o app funciona em **modo local** (dados só no aparelho; use **Configurações → Baixar backup**).

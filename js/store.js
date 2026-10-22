@@ -64,9 +64,11 @@ const Store = {
     for (const k in def) if (this.db[k] === undefined) this.db[k] = def[k];
     for (const k in def.settings) if (this.db.settings[k] === undefined) this.db.settings[k] = def.settings[k];
   },
-  save() {
+  // noSync = true quando a alteração veio da nuvem (não precisa reenviar)
+  save(noSync) {
     try { localStorage.setItem(DB_KEY, JSON.stringify(this.db)); }
     catch (e) { toast('Erro ao salvar: armazenamento cheio. Faça um backup.', true); }
+    if (!noSync && typeof Cloud !== 'undefined') Cloud.schedule();
   },
   get s() { return this.db.settings; },
 
@@ -75,7 +77,14 @@ const Store = {
     if (this.db.auditoria.length > 1000) this.db.auditoria.length = 1000;
   },
 
-  next(kind) { const n = this.db.seq[kind]++; return n; },
+  // Próximo número considerando também registros criados em outros aparelhos
+  next(kind) {
+    const col = { os: 'os', orc: 'orcamentos', venda: 'vendas' }[kind];
+    const max = Math.max(0, ...this.db[col].map(x => Number(x.numero) || 0));
+    const n = Math.max(this.db.seq[kind] || 1, max + 1);
+    this.db.seq[kind] = n + 1;
+    return n;
+  },
 
   /* ----- Clientes ----- */
   cliente(id) { return this.db.clientes.find(c => c.id === id); },
