@@ -1,13 +1,15 @@
 /* Venda de Produtos (PDV) */
 const VendasPage = {
-  st: { tab: 'produtos', q: '', cat: '' },
+  st: { tab: 'produtos', q: '', cat: '' }, // cat: '' todos os celulares · 'seminovo' · 'novo'
   cart: [],
 
   render(main) {
     const prods = Store.db.produtos.filter(p => !p.deleted);
-    const baixo = prods.filter(p => p.qtd <= (p.minimo || 0)).length;
-    const venda = prods.reduce((s, p) => s + (p.preco || 0) * Math.max(0, p.qtd), 0);
-    const custo = prods.reduce((s, p) => s + (p.custo || 0) * Math.max(0, p.qtd), 0);
+    const cels = prods.filter(p => ehCelular(p) && p.qtd > 0);
+    const acess = prods.filter(p => !ehCelular(p));
+    const baixo = acess.filter(p => p.qtd <= (p.minimo || 0)).length;
+    const venda = cels.reduce((s, p) => s + (p.preco || 0) * p.qtd, 0);
+    const custo = cels.reduce((s, p) => s + (p.custo || 0) * p.qtd, 0);
     const cx = Store.caixaAberto();
     const cxAntigo = cx && dayKey(cx.abertoEm) !== dayKey();
     main.innerHTML = `
@@ -20,50 +22,60 @@ const VendasPage = {
       <div id="vd-body"></div>
       <button class="fab" id="vd-fab" onclick="VendasPage.checkout()" title="Carrinho" style="display:${this.cart.length ? 'grid' : 'none'}">${icon('cart')}<span id="vd-count" style="position:absolute;top:-2px;right:-2px;background:#fff;color:#000;border-radius:99px;font-size:12px;font-weight:800;padding:2px 7px">0</span></button>`;
     $$('#vd-tabs button').forEach(b => b.onclick = () => { this.st.tab = b.dataset.k; $$('#vd-tabs button').forEach(x => x.classList.toggle('on', x === b)); this.body(); });
-    this.stats = { total: prods.length, baixo, venda, custo };
+    this.stats = { cels: cels.reduce((s, p) => s + p.qtd, 0), semi: cels.filter(p => p.seminovo).reduce((s, p) => s + p.qtd, 0), acess: acess.length, baixo, venda, custo };
     this.body();
   },
 
   body() {
     const box = $('#vd-body');
     if (this.st.tab === 'hist') return this.historico(box);
-    const { total, baixo, venda, custo } = this.stats;
+    const { cels, semi, acess, baixo, venda, custo } = this.stats;
     box.innerHTML = `
       <div class="grid grid-2 mb">
-        <div class="stat stat-icon"><div class="ic">${icon('layers')}</div><div><div class="label">Total produtos</div><div class="value">${total} <span class="small muted">itens</span></div></div></div>
-        <div class="stat stat-icon"><div class="ic" style="color:var(--orange);background:rgba(251,146,60,.12)">${icon('alert')}</div><div><div class="label">Baixo estoque</div><div class="value">${baixo} <span class="small muted">itens</span></div></div></div>
+        <div class="stat stat-icon"><div class="ic">${icon('phone')}</div><div><div class="label">Celulares em estoque</div><div class="value">${cels}</div><div class="sub">${semi} seminovo(s) · ${cels - semi} novo(s)</div></div></div>
+        <div class="stat stat-icon" style="cursor:pointer" onclick="$('#vd-q').focus()"><div class="ic" style="color:var(--muted);background:var(--card-2)">${icon('tag')}</div><div><div class="label">Acessórios</div><div class="value">${acess}</div><div class="sub">${baixo ? `<span class="orange">${baixo} com estoque baixo</span> · ` : ''}use a busca</div></div></div>
       </div>
       <div class="hero mb" style="padding:18px"><div class="stat-icon"><div class="ic">${icon('dollar')}</div><div>
-        <div class="label" style="font-size:11.5px;font-weight:700;letter-spacing:.12em;color:var(--muted)">VALOR DE VENDA DO ESTOQUE</div>
+        <div class="label" style="font-size:11.5px;font-weight:700;letter-spacing:.12em;color:var(--muted)">VALOR DOS CELULARES EM ESTOQUE</div>
         <div class="value" style="font-size:24px;font-weight:800">${money(venda)}</div>
         <div class="small muted">Custo ${money(custo)} · Lucro <b class="green">${money(venda - custo)} (${venda ? Math.round((venda - custo) / venda * 100) : 0}%)</b></div></div></div></div>
-      <div class="row mb"><div class="input-icon grow">${icon('search')}<input class="input" id="vd-q" placeholder="Buscar produto ou código..." value="${esc(this.st.q)}"></div></div>
+      <div class="row mb"><div class="input-icon grow">${icon('search')}<input class="input" id="vd-q" placeholder="Buscar celular ou acessório..." value="${esc(this.st.q)}"></div></div>
       <div class="row wrap mb">
-        <select class="input" id="vd-cat" style="width:auto;min-height:46px"><option value="">Todas as categorias</option><option value="__semi" ${this.st.cat === '__semi' ? 'selected' : ''}>Aparelhos seminovos</option>${selectOpts([...new Set(Store.db.produtos.filter(p => !p.deleted).map(p => p.categoria).filter(Boolean))], this.st.cat)}</select>
-        <button class="btn" title="Venda avulsa" onclick="VendasPage.avulso()">${icon('repeat')} Avulso</button>
-        <button class="btn" onclick="EstoquePage.lote('produto')">${icon('layers')}</button>
-        <button class="btn primary" onclick="EstoquePage.editar('produto')">${icon('plus')} Novo Produto</button>
+        <div class="tabs" id="vd-cat">${[['', 'Todos os celulares'], ['seminovo', 'Seminovos'], ['novo', 'Novos']].map(([k, l]) => `<button data-c="${k}" class="${this.st.cat === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       </div>
+      <div class="row wrap mb">
+        <button class="btn primary" onclick="EstoquePage.editar('produto', null, { tipoProduto: 'seminovo' })">${icon('plus')} Novo celular</button>
+        <button class="btn" onclick="EstoquePage.editar('produto', null, { tipoProduto: 'acessorio' })">${icon('tag')} Novo acessório</button>
+        <button class="btn" title="Venda avulsa" onclick="VendasPage.avulso()">${icon('repeat')} Avulso</button>
+        <button class="btn" title="Entrada em lote" onclick="EstoquePage.lote('produto')">${icon('layers')}</button>
+      </div>
+      <div class="xs muted mb" id="vd-dica"></div>
       <div class="grid grid-2" id="vd-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))"></div>`;
     $('#vd-q').oninput = e => { this.st.q = e.target.value; this.renderProdutos(); };
-    $('#vd-cat').onchange = e => { this.st.cat = e.target.value; this.renderProdutos(); };
+    $$('#vd-cat [data-c]').forEach(b => b.onclick = () => { this.st.cat = b.dataset.c; $$('#vd-cat [data-c]').forEach(x => x.classList.toggle('on', x === b)); this.renderProdutos(); });
     this.renderProdutos();
   },
 
   renderProdutos() {
     const g = $('#vd-grid'); if (!g) return;
-    const cat = this.st.cat;
-    const list = Store.db.produtos.filter(p => !p.deleted && (!cat || (cat === '__semi' ? p.seminovo : p.categoria === cat)) && matches(this.st.q, p.nome, p.codigo, p.categoria, p.imei)).sort((a, b) => a.nome.localeCompare(b.nome));
+    const cat = this.st.cat, q = this.st.q.trim();
+    // Sem busca: só celulares em estoque. Com busca: tudo (inclusive acessórios e esgotados)
+    const list = Store.db.produtos.filter(p => !p.deleted && (q
+      ? matches(q, p.nome, p.codigo, p.categoria, p.imei, p.cor)
+      : ehCelular(p) && p.qtd > 0 && (!cat || tipoProduto(p) === cat)))
+      .sort((a, b) => (ehCelular(b) - ehCelular(a)) || a.nome.localeCompare(b.nome));
+    const dica = $('#vd-dica');
+    if (dica) dica.innerHTML = q ? `${list.length} resultado(s) para "<b>${esc(q)}</b>" · celulares e acessórios` : `${icon('info', 'sm')} Mostrando só celulares em estoque. Acessórios aparecem quando você busca.`;
     g.innerHTML = list.map(p => {
       const inCart = this.cart.find(c => c.id === p.id)?.qtd || 0;
       return `<div class="prod-card" onclick="VendasPage.add('${p.id}')" style="${inCart ? 'border-color:var(--gold)' : ''}">
         <div class="row between"><span class="xs muted ellipsis">${esc(p.categoria || '')}</span><button class="icon-btn" style="width:30px;height:30px" onclick="event.stopPropagation();EstoquePage.editar('produto','${p.id}')">${icon('edit', 'sm')}</button></div>
         <b style="line-height:1.25">${esc(p.nome)}</b>
-        ${p.seminovo ? `<div class="row wrap" style="gap:4px"><span class="pill gold xs">Seminovo · 6 meses</span>${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei ? `<div class="xs muted ellipsis">IMEI ${esc(p.imei)}</div>` : ''}` : ''}
+        ${ehCelular(p) ? `<div class="row wrap" style="gap:4px">${p.seminovo ? '<span class="pill gold xs">Seminovo · 6 meses</span>' : '<span class="pill green xs">Novo</span>'}${p.armazenamento ? `<span class="pill xs">${esc(p.armazenamento)}</span>` : ''}${p.bateria ? `<span class="pill xs">🔋 ${esc(p.bateria)}</span>` : ''}</div>${p.imei || p.cor ? `<div class="xs muted ellipsis">${[p.cor, p.imei && 'IMEI ' + p.imei].filter(Boolean).map(esc).join(' · ')}</div>` : ''}` : '<span class="pill xs" style="align-self:flex-start">Acessório</span>'}
         <div class="gold bold" style="font-size:18px">${money(p.preco)}</div>
         <div class="row between xs"><span class="${p.qtd <= (p.minimo || 0) ? 'red' : 'muted'}">Estoque: ${p.qtd}</span>${inCart ? `<span class="pill gold xs">${inCart} no carrinho</span>` : ''}</div>
       </div>`;
-    }).join('') || `<div class="empty" style="grid-column:1/-1">${icon('bag')}<div>Nenhum produto. Cadastre em "Novo Produto".</div></div>`;
+    }).join('') || `<div class="empty" style="grid-column:1/-1">${icon(q ? 'search' : 'phone')}<div>${q ? 'Nada encontrado.' : 'Nenhum celular em estoque.<br>Toque em <b class="gold">Novo celular</b> para cadastrar. Acessórios aparecem pela busca.'}</div></div>`;
     this.updateFab();
   },
 
@@ -77,7 +89,7 @@ const VendasPage = {
     const p = Store.produto(id);
     const it = this.cart.find(c => c.id === id);
     if ((it?.qtd || 0) + 1 > p.qtd) toast(`Atenção: estoque de "${p.nome}" é ${p.qtd}`, true);
-    if (it) it.qtd++; else this.cart.push({ id, nome: p.nome, preco: p.preco || 0, custo: p.custo || 0, qtd: 1, seminovo: !!p.seminovo, imei: p.imei || '', cor: p.cor || '', garantiaDias: p.seminovo ? GARANTIA_SEMINOVO_DIAS : (p.garantiaDias ?? 90) });
+    if (it) it.qtd++; else this.cart.push({ id, nome: p.nome, preco: p.preco || 0, custo: p.custo || 0, qtd: 1, seminovo: !!p.seminovo, aparelho: ehCelular(p), imei: p.imei || '', cor: p.cor || '', garantiaDias: p.seminovo ? GARANTIA_SEMINOVO_DIAS : (p.garantiaDias ?? 90) });
     this.renderProdutos();
     toast(`${p.nome} adicionado`);
   },
@@ -122,7 +134,7 @@ const VendasPage = {
             ${field('Nome do comprador (se não cadastrado)', '<input class="input" id="ck-nome" placeholder="Nome completo">', { opt: true })}` : '';
           $('#ck-items', el).innerHTML = this.cart.map((c, i) => `<div class="cart-line" style="flex-wrap:wrap"><div class="grow"><b>${esc(c.nome)}</b><div class="xs muted">${money(c.preco)} un.${c.seminovo ? ' · <span class="gold">garantia 6 meses</span>' : ''}</div></div>
             <div class="qty"><button data-d="-1" data-i="${i}">−</button><span>${c.qtd}</span><button data-d="1" data-i="${i}">+</button></div><b style="min-width:80px;text-align:right">${money(c.preco * c.qtd)}</b>
-            ${c.seminovo ? `<input class="input" data-imei="${i}" placeholder="IMEI do aparelho" value="${esc(c.imei)}" style="flex-basis:100%;min-height:40px;padding:8px 12px;font-family:ui-monospace,monospace">` : ''}</div>`).join('');
+            ${c.aparelho || c.seminovo ? `<input class="input" data-imei="${i}" placeholder="IMEI do aparelho" value="${esc(c.imei)}" style="flex-basis:100%;min-height:40px;padding:8px 12px;font-family:ui-monospace,monospace">` : ''}</div>`).join('');
           $$('[data-imei]', el).forEach(inp => inp.oninput = () => { this.cart[+inp.dataset.imei].imei = inp.value.trim(); });
           $$('[data-d]', el).forEach(b => b.onclick = () => { const c = this.cart[+b.dataset.i]; c.qtd += +b.dataset.d; if (c.qtd <= 0) this.cart.splice(+b.dataset.i, 1); if (!this.cart.length) { m.close(); this.renderProdutos(); return; } items(); this.renderProdutos(); });
           calc();

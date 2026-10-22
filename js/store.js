@@ -13,6 +13,9 @@ const OS_ATIVOS = ['analise', 'peca', 'servico', 'concluido'];
 // Garantias fixas da loja
 const GARANTIA_REPARO_DIAS = 90;    // reparos: sempre 3 meses
 const GARANTIA_SEMINOVO_DIAS = 180; // aparelhos seminovos: sempre 6 meses
+// Tipo do produto à venda: celular seminovo, celular novo ou acessório
+const tipoProduto = p => p.seminovo ? 'seminovo' : p.tipoProduto === 'novo' ? 'novo' : 'acessorio';
+const ehCelular = p => tipoProduto(p) !== 'acessorio';
 const FORMAS_PGTO = { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Cartão de Débito', credito: 'Cartão de Crédito', transferencia: 'Transferência', outro: 'Outro' };
 const TIPOS_APARELHO = [
   ['celular', 'Celular', 'phone'], ['tablet', 'Tablet', 'tablet'], ['notebook', 'Notebook', 'laptop'], ['computador', 'Computador', 'monitor'],

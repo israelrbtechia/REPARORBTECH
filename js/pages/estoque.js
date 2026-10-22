@@ -68,9 +68,10 @@ const EstoquePage = {
     App.updateNav();
   },
 
-  editar(tipo, id) {
+  // pre: valores iniciais de um produto novo (ex.: { tipoProduto: 'seminovo' })
+  editar(tipo, id, pre = {}) {
     const col = this.col(tipo);
-    const p = id ? { ...col.find(x => x.id === id) } : { qtd: 0, minimo: 1 };
+    const p = id ? { ...col.find(x => x.id === id) } : { qtd: 0, minimo: 1, ...pre, ...(pre.tipoProduto === 'seminovo' ? { seminovo: true, minimo: 0, categoria: 'Celulares seminovos' } : pre.tipoProduto === 'novo' ? { minimo: 0, categoria: 'Celulares novos' } : {}) };
     const forns = Store.db.fornecedores.filter(f => !f.deleted);
     const cats = [...new Set(col.map(x => x.categoria).filter(Boolean))];
     const lbl = tipo === 'peca' ? 'Peça' : 'Produto';
@@ -93,25 +94,35 @@ const EstoquePage = {
           ${field('Estoque mínimo', `<input class="input" type="number" name="minimo" value="${p.minimo ?? 1}">`)}
         </div>
         ${tipo === 'produto' ? `
-          <label class="check card mb" style="padding:12px 14px"><input type="checkbox" name="seminovo" ${p.seminovo ? 'checked' : ''}> <span><b>Aparelho seminovo</b> <span class="gold">· garantia de 6 meses</span><br><span class="xs muted">Gera o termo de garantia em PDF na venda.</span></span></label>
-          <div id="ed-semi" class="${p.seminovo ? '' : 'hidden'}">
+          <div class="lbl mb">Tipo de produto</div>
+          <input type="hidden" name="tipoProduto" value="${tipoProduto(p)}">
+          <div class="grid grid-3 mb" id="ed-tipo">${[['seminovo', 'Celular seminovo', 'phone', 'Garantia 6 meses'], ['novo', 'Celular novo', 'phone', 'Lacrado / novo'], ['acessorio', 'Acessório', 'tag', 'Capa, cabo, película...']]
+            .map(([k, l, ic, d]) => `<button type="button" class="chip-opt ${tipoProduto(p) === k ? 'on' : ''}" data-tp="${k}">${icon(ic)}<span>${l}</span><span class="xs muted" style="font-weight:500">${d}</span></button>`).join('')}</div>
+          <div id="ed-semi" class="${ehCelular(p) ? '' : 'hidden'}">
             <div class="form-row">${field('IMEI / Serial', `<input class="input" name="imei" value="${esc(p.imei || '')}" style="font-family:ui-monospace,monospace">`, { opt: true })}${field('Cor', `<input class="input" name="cor" value="${esc(p.cor || '')}">`, { opt: true })}</div>
             <div class="form-row">${field('Armazenamento', `<input class="input" name="armazenamento" placeholder="Ex: 128 GB" value="${esc(p.armazenamento || '')}">`, { opt: true })}${field('Saúde da bateria', `<input class="input" name="bateria" placeholder="Ex: 89%" value="${esc(p.bateria || '')}">`, { opt: true })}</div>
           </div>
-          <div id="ed-gar" class="${p.seminovo ? 'hidden' : ''}">${field('Garantia (dias)', `<input class="input" type="number" name="garantiaDias" value="${p.garantiaDias ?? 90}">`)}</div>` : ''}
+          <div id="ed-gar" class="${p.seminovo ? 'hidden' : ''}">${field('Garantia (dias)', `<input class="input" type="number" name="garantiaDias" value="${p.garantiaDias ?? (tipoProduto(p) === 'novo' ? 365 : 90)}">`)}</div>` : ''}
         ${field('Fornecedor', `<select class="input" name="fornecedorId"><option value="">—</option>${selectOpts(forns.map(f => [f.id, f.nome]), p.fornecedorId)}</select>`, { opt: true })}`,
       foot: `${id ? `<button class="btn danger" id="ed-del">${icon('trash')}</button>` : ''}<button class="btn" data-close>Cancelar</button><button class="btn primary" id="ed-ok">${icon('check')} Salvar</button>`,
       onMount: (el, m) => {
         const mg = () => { const f = readForm(el); const c = parseMoney(f.custo), v = parseMoney(f.preco); $('#ed-margem', el).textContent = c && v ? `Lucro por unidade: ${money(v - c)} (${Math.round((v - c) / v * 100)}%)` : ''; };
         $('[name=custo]', el).oninput = mg; $('[name=preco]', el).oninput = mg; mg();
-        const sn = $('[name=seminovo]', el);
-        if (sn) sn.onchange = () => { $('#ed-semi', el).classList.toggle('hidden', !sn.checked); $('#ed-gar', el).classList.toggle('hidden', sn.checked); if (sn.checked && !$('[name=categoria]', el).value) $('[name=categoria]', el).value = 'Aparelhos seminovos'; };
+        $$('[data-tp]', el).forEach(b => b.onclick = () => {
+          const t = b.dataset.tp; $('[name=tipoProduto]', el).value = t;
+          $$('[data-tp]', el).forEach(x => x.classList.toggle('on', x === b));
+          $('#ed-semi', el).classList.toggle('hidden', t === 'acessorio');
+          $('#ed-gar', el).classList.toggle('hidden', t === 'seminovo');
+          const g = $('[name=garantiaDias]', el); if (g && !id) g.value = t === 'novo' ? 365 : 90;
+          const cat = $('[name=categoria]', el);
+          if (!cat.value || /^Celulares (novos|seminovos)$/.test(cat.value)) cat.value = t === 'seminovo' ? 'Celulares seminovos' : t === 'novo' ? 'Celulares novos' : cat.value.startsWith('Celulares') ? '' : cat.value;
+        });
         $('#ed-ok', el).onclick = () => {
           const f = readForm(el);
           if (!f.nome) return toast('Informe o nome', true);
           const qtd = parseInt(f.qtd) || 0;
           Object.assign(p, { nome: f.nome, codigo: f.codigo, categoria: f.categoria, compat: f.compat, custo: parseMoney(f.custo), preco: parseMoney(f.preco), minimo: parseInt(f.minimo) || 0, fornecedorId: f.fornecedorId });
-          if (tipo === 'produto') Object.assign(p, { seminovo: !!f.seminovo, imei: f.imei, cor: f.cor, armazenamento: f.armazenamento, bateria: f.bateria, garantiaDias: f.seminovo ? GARANTIA_SEMINOVO_DIAS : parseInt(f.garantiaDias) || 0 });
+          if (tipo === 'produto') Object.assign(p, { tipoProduto: f.tipoProduto, seminovo: f.tipoProduto === 'seminovo', imei: f.imei, cor: f.cor, armazenamento: f.armazenamento, bateria: f.bateria, garantiaDias: f.tipoProduto === 'seminovo' ? GARANTIA_SEMINOVO_DIAS : parseInt(f.garantiaDias) || 0 });
           if (!id) { p.id = uid(); p.criadoEm = nowISO(); p.qtd = 0; col.push(p); if (qtd) Store.movimentar(tipo, p, qtd, 'Estoque inicial'); }
           else { const i = col.findIndex(x => x.id === id); const diff = qtd - col[i].qtd; p.qtd = col[i].qtd; col[i] = p; if (diff) Store.movimentar(tipo, p, diff, 'Ajuste na edição'); }
           Store.save(); m.close(); App.refresh(); toast(`${lbl} salvo`);

@@ -32,7 +32,7 @@ const PosVenda = {
     }
     for (const v of Store.db.vendas) {
       if (v.cancelada) continue;
-      const aps = v.itens.filter(i => i.seminovo); if (!aps.length) continue;
+      const aps = v.itens.filter(i => i.seminovo || i.aparelho); if (!aps.length) continue;
       const c = v.clienteId ? Store.cliente(v.clienteId) : null;
       out.push({ key: 'venda:' + v.id, tipo: 'venda', ref: v, cliente: c, nomeAvulso: v.clienteNome, aparelho: aps.map(i => i.nome).join(' e '), data: v.data, dias: daysBetween(v.data, hoje), titulo: `Compra · Venda #${v.numero}`, motivo: 'a compra do seu' });
     }
