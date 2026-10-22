@@ -337,7 +337,7 @@ Pages.config = {
       ${Cloud.enabled && Cloud.loja ? `<div class="card mb" id="cf-equipe">
         <h3>${icon('users', 'sm')} Equipe e <span class="gold">nuvem</span></h3>
         <p class="small muted" style="margin-top:0">Os dados ficam salvos no Supabase e sincronizam em tempo real entre todos os aparelhos da equipe.</p>
-        <div class="kv"><span class="k">Loja</span><span class="v">${esc(Cloud.loja.nome)}</span></div>
+        <div class="kv"><span class="k">Loja</span><span class="v">${esc(Cloud.loja.nome)} <span class="muted xs">#${esc(String(Cloud.loja.id).slice(0, 6))}</span></span></div>
         <div class="kv"><span class="k">Seu acesso</span><span class="v">${Cloud.loja.papel === 'dono' ? '<span class="gold">Dono</span>' : 'Funcionário'}</span></div>
         <div class="kv"><span class="k">Sincronização</span><span class="v">${{ ok: '<span class="green">Em dia</span>', sync: 'Sincronizando...', offline: '<span class="red">Sem internet</span>', erro: '<span class="red">Erro</span>' }[Cloud.status] || '—'}</span></div>
         <div class="lbl mt mb">Quem tem acesso</div><div id="cf-membros"><p class="small muted">Carregando...</p></div>
@@ -357,6 +357,27 @@ Pages.config = {
             <button type="button" class="btn sm ghost mt" onclick="Pages.config.novoCodigo()">${icon('repeat', 'sm')} Gerar novo código</button>
           </div></details>` : ''}
         <button class="btn block mt" onclick="App.syncAgora()">${icon('repeat')} Sincronizar agora</button>
+      </div>` : ''}
+
+      ${Cloud.enabled && Cloud.loja ? `<div class="card mb" id="cf-email">
+        <h3>${icon('bell', 'sm')} Aviso de pedidos por <span class="gold">e-mail</span></h3>
+        <p class="small muted" style="margin-top:0">Quando um cliente envia um pedido de orçamento pelo link, o pedido aparece no app de todos da equipe e também chega no <b>e-mail de cada um</b> que estiver com o sino ligado na lista acima.</p>
+        <div id="cf-email-st" class="small muted">Carregando...</div>
+        ${Cloud.loja.papel === 'dono' ? `<form id="cf-email-f" class="mt">
+          ${field('E-mail remetente (o mesmo cadastrado no Brevo)', `<input class="input" name="remetente" type="email" value="${esc(App.userEmail())}" required>`)}
+          ${field('Chave de API do Brevo', '<input class="input" name="chave" type="password" autocomplete="off" placeholder="xkeysib-...">')}
+          <label class="check" style="padding:4px 0 10px"><input type="checkbox" name="ativo" checked> Enviar avisos por e-mail</label>
+          <div class="grid grid-2"><button class="btn primary">${icon('check')} Salvar</button><button type="button" class="btn" id="cf-email-teste">${icon('send')} Enviar teste</button></div>
+          <details class="mt"><summary class="small muted" style="cursor:pointer">Como pegar a chave (grátis, 2 minutos)</summary>
+            <ol class="small" style="padding-left:18px;line-height:1.6">
+              <li>Crie uma conta grátis em <a href="https://www.brevo.com" target="_blank" class="gold">brevo.com</a> com o e-mail da loja.</li>
+              <li>Menu do perfil → <b>SMTP & API</b> → aba <b>API Keys</b> → <b>Generate a new API key</b>.</li>
+              <li>Copie a chave (começa com <b>xkeysib-</b>), cole aqui e toque em Salvar.</li>
+              <li>Toque em <b>Enviar teste</b> e veja se chegou (confira o spam na primeira vez).</li>
+            </ol>
+            <p class="xs muted">A chave fica guardada só no banco do Supabase: o app não mostra ela de volta. Grátis até 300 e-mails por dia.</p>
+          </details>
+        </form>` : ''}
       </div>` : ''}
 
       ${!Cloud.enabled ? `<div class="card mb" style="border-color:rgba(251,146,60,.45)">
@@ -396,6 +417,7 @@ Pages.config = {
     $('#cf-dossie').onchange = e => { this.importarDossie(e.target.files[0]); e.target.value = ''; };
     $('#cf-clipdf').onchange = e => { this.importarClientesPdf(e.target.files[0]); e.target.value = ''; };
     if ($('#cf-membros')) this.renderMembros();
+    if ($('#cf-email')) this.emailInit();
     const ff = $('#cf-func');
     if (ff) ff.onsubmit = async e => {
       e.preventDefault();
@@ -481,12 +503,48 @@ Pages.config = {
       const dono = Cloud.loja.papel === 'dono';
       box.innerHTML = ms.map(m => `<div class="cart-line"><div class="avatar">${esc((m.nome || m.email || '?')[0].toUpperCase())}</div>
         <div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(m.nome || m.email || 'Sem e-mail')}${m.user_id === Cloud.user.id ? ' <span class="muted xs">(você)</span>' : ''}</b><div class="xs muted ellipsis">${m.nome ? esc(m.email) + ' · ' : ''}<span class="${m.papel === 'dono' ? 'gold' : ''}">${m.papel === 'dono' ? 'Dono' : 'Funcionário'}</span> · desde ${fmtDate(m.criado_em)}</div></div>
+        ${'notificar_pedidos' in m && (dono || m.user_id === Cloud.user.id) && m.email ? `<button class="icon-btn" title="${m.notificar_pedidos ? 'Recebe' : 'Não recebe'} pedidos por e-mail (toque para mudar)" data-av="${m.user_id}" data-on="${m.notificar_pedidos ? 1 : 0}" style="${m.notificar_pedidos ? 'color:var(--gold)' : 'opacity:.35'}">${icon('bell', 'sm')}</button>` : ''}
         ${dono && m.papel !== 'dono' ? `<button class="icon-btn" title="Remover da equipe" data-rm="${m.user_id}">${icon('trash', 'sm')}</button>` : ''}</div>`).join('');
+      $$('[data-av]', box).forEach(b => b.onclick = async () => {
+        const on = b.dataset.on !== '1';
+        try { await Cloud.avisoEmail(b.dataset.av, on); toast(on ? 'Vai receber os pedidos por e-mail' : 'Não vai mais receber por e-mail'); this.renderMembros(); } catch (e) { toast(e.message, true); }
+      });
       $$('[data-rm]', box).forEach(b => b.onclick = async () => {
         if (!(await confirmDialog('Remover este funcionário da equipe? Ele perde o acesso aos dados da loja.', { danger: true, ok: 'Remover' }))) return;
         try { await Cloud.removerMembro(b.dataset.rm); toast('Removido da equipe'); this.renderMembros(); } catch (e) { toast(e.message, true); }
       });
     } catch (e) { box.innerHTML = `<p class="small red">Não foi possível carregar (sem internet?).</p>`; }
+  },
+  async emailInit() {
+    const st = $('#cf-email-st'), f = $('#cf-email-f');
+    const mostrar = d => {
+      if (!d || !d.configurado) st.innerHTML = `<span class="pill red">Desligado</span> ${Cloud.loja.papel === 'dono' ? 'Cole a chave do Brevo abaixo para ativar.' : 'O dono da loja precisa configurar.'}`;
+      else st.innerHTML = d.ativo ? `<span class="pill green">Ativo</span> Enviando de <b>${esc(d.remetente || '')}</b> · chave ${esc(d.chave || '')}` : `<span class="pill">Pausado</span> Chave salva, envio desligado.`;
+      if (f && d) { if (d.remetente) f.remetente.value = d.remetente; if (d.configurado) { f.ativo.checked = !!d.ativo; f.chave.placeholder = `Salva (${d.chave}) · cole outra para trocar`; } }
+    };
+    try { mostrar(await Cloud.statusEmail()); } catch (e) { st.innerHTML = `<span class="red">${esc(e.message)}</span>`; }
+    if (!f) return;
+    f.onsubmit = async e => {
+      e.preventDefault();
+      const chave = f.chave.value.trim();
+      if (chave && !/^xkeysib-/.test(chave)) return toast('A chave do Brevo começa com xkeysib-', true);
+      try { mostrar(await Cloud.configurarEmail(chave, f.remetente.value.trim().toLowerCase(), f.ativo.checked)); f.chave.value = ''; toast('Aviso por e-mail salvo'); }
+      catch (err) { toast(err.message, true); }
+    };
+    $('#cf-email-teste').onclick = async ev => {
+      const b = ev.currentTarget; b.disabled = true;
+      try {
+        const id = await Cloud.testarEmail();
+        if (!id) return toast('Salve a chave e ative o envio primeiro', true);
+        toast('Enviando teste...');
+        let r = null;
+        for (let i = 0; i < 6 && !r?.status && !r?.erro; i++) { await new Promise(ok => setTimeout(ok, 1500)); r = await Cloud.resultadoEmail(id); }
+        if (r?.status >= 200 && r.status < 300) toast('E-mail de teste enviado para a equipe! Confira a caixa de entrada (e o spam).');
+        else if (r?.status) toast(`O Brevo recusou (${r.status}): ${/key|unauthori/i.test(r.resposta || '') ? 'chave inválida' : /sender/i.test(r.resposta || '') ? 'remetente não confirmado no Brevo' : (r.resposta || '').slice(0, 120)}`, true);
+        else if (r?.erro) toast('Falha ao enviar: ' + r.erro, true);
+        else toast('Teste enviado. Confira a caixa de entrada em instantes.');
+      } catch (err) { toast(err.message, true); } finally { b.disabled = false; }
+    };
   },
   async novoCodigo() {
     if (!(await confirmDialog('Gerar um novo código? O código atual deixa de funcionar (quem já está na equipe continua).', { ok: 'Gerar' }))) return;

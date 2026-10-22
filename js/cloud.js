@@ -81,9 +81,11 @@ const Cloud = {
 
   /* ---------- Loja ---------- */
   async carregarLoja() {
-    const { data, error } = await this.sb.from('membros').select('papel, lojas(id, nome, codigo_convite)').eq('user_id', this.user.id).order('criado_em').limit(1);
+    const { data, error } = await this.sb.from('membros').select('papel, lojas(id, nome, codigo_convite)').eq('user_id', this.user.id).order('criado_em');
     if (error) throw error;
-    const m = data && data[0];
+    // se a pessoa foi adicionada como funcionário, a loja da equipe vem antes de uma loja própria
+    const ls = (data || []).filter(m => m.lojas);
+    const m = ls.find(x => x.papel === 'membro') || ls[0];
     this.loja = m ? { ...m.lojas, papel: m.papel } : null;
     return this.loja;
   },
@@ -98,10 +100,23 @@ const Cloud = {
     this.loja = { ...data, papel: 'membro' };
   },
   async membros() {
-    const { data, error } = await this.sb.from('membros').select('user_id, email, nome, papel, criado_em').eq('loja_id', this.loja.id).order('criado_em');
-    if (error) throw error;
+    let r = await this.sb.from('membros').select('user_id, email, nome, papel, criado_em, notificar_pedidos').eq('loja_id', this.loja.id).order('criado_em');
+    // schema antigo (sem a coluna de aviso por e-mail)
+    if (r.error && /notificar_pedidos/.test(r.error.message)) r = await this.sb.from('membros').select('user_id, email, nome, papel, criado_em').eq('loja_id', this.loja.id).order('criado_em');
+    if (r.error) throw r.error;
+    return r.data;
+  },
+  // Aviso de pedidos por e-mail (envio feito pelo banco via Brevo)
+  async rpcEmail(fn, args = {}) {
+    const { data, error } = await this.sb.rpc(fn, { p_loja: this.loja.id, ...args });
+    if (error) throw new Error(/does not exist|Could not find/i.test(error.message) ? 'Rode o schema.sql atualizado no Supabase para ativar os avisos por e-mail' : error.message);
     return data;
   },
+  statusEmail() { return this.rpcEmail('status_email'); },
+  configurarEmail(apiKey, remetente, ativo) { return this.rpcEmail('configurar_email', { p_api_key: apiKey || '', p_remetente: remetente, p_site: location.origin, p_ativo: ativo }); },
+  testarEmail() { return this.rpcEmail('testar_email'); },
+  async resultadoEmail(id) { const { data } = await this.sb.rpc('resultado_email', { p_id: id }); return data; },
+  avisoEmail(uid, ativo) { return this.rpcEmail('definir_aviso_email', { p_user: uid, p_ativo: ativo }); },
   // Dono cria login e senha do funcionário. Usa um cliente separado para não trocar a sessão do dono.
   async criarFuncionario(nome, email, senha) {
     const c = window.RBTECH_CONFIG;

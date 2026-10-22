@@ -247,8 +247,13 @@ const App = {
         <img class="login-logo" src="assets/logo.jpg" alt="RB Tech" style="width:150px">
         <h1>Quase <span class="gold">lá!</span></h1>
         <p class="muted" style="margin:0 0 20px">Logado como <b>${esc(Cloud.user.email)}</b>. Crie sua loja ou entre na equipe de uma loja existente.</p>
+        <div class="card mb" style="border-color:rgba(212,175,55,.5);background:var(--gold-soft)">
+          <b>${icon('users', 'sm')} É funcionário?</b>
+          <p class="small" style="margin:6px 0 10px">Não crie uma loja. Peça ao dono para adicionar o e-mail <b>${esc(Cloud.user.email)}</b> em <b>Configurações → Equipe</b> e toque abaixo.</p>
+          <button class="btn primary block" id="ob-retry">${icon('repeat')} Já fui adicionado, entrar</button>
+        </div>
         <form class="card mb" id="ob-criar">
-          <h3>${icon('bag', 'sm')} Criar minha <span class="gold">loja</span></h3>
+          <h3>${icon('bag', 'sm')} Sou o dono: criar <span class="gold">loja</span></h3>
           ${field('Nome da loja', `<input class="input" name="nome" value="${esc(Store.s.loja || 'RB Tech Celulares')}" required>`)}
           ${locais ? `<label class="check"><input type="checkbox" name="enviar" checked> <span>Enviar para a nuvem os dados já salvos neste aparelho <span class="muted small">(${Store.db.os.length} OS, ${Store.db.clientes.length} clientes)</span></span></label>` : ''}
           <button class="btn primary block">${icon('check')} Criar loja</button>
@@ -261,6 +266,10 @@ const App = {
         </form>
         <button class="btn ghost block" onclick="App.logout()">${icon('logout')} Sair</button>
       </div></div>`;
+    $('#ob-retry').onclick = async () => {
+      try { if (await Cloud.carregarLoja()) { this.cacheLoja(); await Cloud.start(false); toast(`Você entrou na equipe de ${Cloud.loja.nome}`); this.render(); } else toast('Ainda não foi adicionado. Peça ao dono.', true); }
+      catch (err) { toast(err.message, true); }
+    };
     $('#ob-criar').onsubmit = async e => {
       e.preventDefault(); const f = readForm(e.target);
       try {

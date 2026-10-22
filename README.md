@@ -24,6 +24,12 @@ App web (PWA) para gestão da assistência técnica **RB Tech Celulares**: tema 
 ## Pedido de orçamento pelo cliente
 Link público `/pedido/<id da loja>` (copie em **Configurações** ou em **OS → Pedidos**): o cliente informa nome, WhatsApp, marca, modelo, defeito e urgência. O pedido chega na hora com **pop-up e som**, aparece na aba **OS → Pedidos** (não lidos em destaque) e no Dashboard. Ao abrir: **Aceitar e criar orçamento** (já preenchido) → enviar o orçamento pelo WhatsApp. Requer a nuvem e o `schema.sql` atualizado.
 
+### Aviso de pedidos por e-mail
+Quando o cliente envia um pedido pelo link, além do aviso no app de todos da equipe, o Supabase manda um e-mail para cada membro com o sino ligado (Configurações → Equipe). O envio usa o Brevo (grátis até 300/dia): crie a conta em brevo.com, gere a chave de API (SMTP & API → API Keys) e cole em **Configurações → Aviso de pedidos por e-mail**. A chave fica só no banco, nunca no código.
+
+### Funcionário com loja separada
+Se o funcionário entrou no app antes de ser adicionado e criou uma loja própria, ao ser adicionado (ou ao rodar o `schema.sql` de novo) os dados dessa loja são juntados automaticamente na loja da equipe.
+
 ## Metas
 Aba **Metas** com dashboard do mês: metas de quantidade ligadas a produtos do cadastro (ex.: 20 fones bluetooth, 10 capas premium), meta de celulares (qualquer novo ou seminovo vendido conta) e **lucro mínimo por aparelho** (ex.: R$ 400), com média, vendas que bateram/ficaram abaixo, ritmo diário e projeção. A Nova venda avisa quando o lucro do aparelho fica abaixo da meta.
 
