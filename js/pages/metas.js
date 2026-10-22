@@ -41,8 +41,11 @@ const Metas = {
     return out;
   },
 
+  // Conta só vendas depois do "Zerar contagem" da meta (se houver)
+  // (o zerar vale só para o mês em que foi feito; os meses anteriores continuam com os números completos)
+  depois(i, desde) { return !desde || monthKey(i.venda.data) !== monthKey(desde) || String(i.venda.data) > desde; },
   progresso(meta, vendidos) {
-    const its = meta.tipo === 'celulares' ? vendidos.filter(i => i.celular) : vendidos.filter(i => (meta.produtoIds || []).includes(i.id));
+    const its = (meta.tipo === 'celulares' ? vendidos.filter(i => i.celular) : vendidos.filter(i => (meta.produtoIds || []).includes(i.id))).filter(i => this.depois(i, meta.resetEm));
     return { feito: its.reduce((s, i) => s + i.qtd, 0), itens: its };
   },
 };
@@ -72,7 +75,7 @@ Pages.metas = {
     const geral = linhas.length ? linhas.reduce((s, l) => s + l.pct, 0) / linhas.length : 0;
 
     // lucro por aparelho
-    const cels = vend.filter(i => i.celular);
+    const cels = vend.filter(i => i.celular && Metas.depois(i, cfg.lucroResetEm));
     const comCusto = cels.filter(i => i.temCusto);
     const meta = Metas.lucroMeta();
     const lucroTotal = comCusto.reduce((s, i) => s + i.lucro, 0);
@@ -109,6 +112,11 @@ Pages.metas = {
           <div class="row between xs muted"><span>${l.falta ? `Faltam <b style="color:var(--text)">${l.falta}</b>` : 'Meta cumprida'}</span>
             <span>${atual && l.falta && restantes ? `~${(l.falta / restantes).toFixed(1).replace('.', ',')} por dia` : ''}${atual && passados ? ` · projeção ${l.proj}` : ''}</span></div>
           ${l.semProduto ? `<button class="btn sm outline-gold block mt" onclick="Pages.metas.escolherProdutos('${l.meta.id}')">${icon('plus', 'sm')} Escolher produtos</button>` : ''}
+          <div class="row wrap between mt" style="border-top:1px dashed var(--line);padding-top:10px;gap:8px">
+            <span class="xs muted" style="flex:1 1 100%">${l.meta.resetEm ? `${icon('repeat', 'sm')} Contando desde ${fmtDateTime(l.meta.resetEm)}` : 'Contando o mês inteiro'}</span>
+            <span class="row" style="gap:6px;margin-left:auto">${l.meta.resetEm ? `<button class="btn sm ghost" onclick="Pages.metas.zerar('${l.meta.id}', true)">${icon('undo', 'sm')} Desfazer</button>` : ''}
+              <button class="btn sm" onclick="Pages.metas.zerar('${l.meta.id}')">${icon('repeat', 'sm')} Zerar contagem</button></span>
+          </div>
         </div>`).join('')}
       </div>
 
@@ -121,6 +129,11 @@ Pages.metas = {
         <div class="mt"><div class="row between small"><span>Lucro com aparelhos no mês</span><b>${money(lucroTotal)} <span class="muted">/ ${money(alvoLucro)}</span></b></div>
           <div class="progress"><div style="width:${alvoLucro ? Math.min(100, lucroTotal / alvoLucro * 100) : 0}%"></div></div>
           <div class="xs muted">Meta do mês = ${metaCel?.alvo || 0} aparelhos × ${money(meta)}</div></div>
+        <div class="row wrap between mt" style="border-top:1px dashed var(--line);padding-top:10px;gap:8px">
+          <span class="xs muted" style="flex:1 1 100%">${cfg.lucroResetEm ? `${icon('repeat', 'sm')} Contando desde ${fmtDateTime(cfg.lucroResetEm)}` : 'Contando o mês inteiro'}</span>
+          <span class="row" style="gap:6px;margin-left:auto">${cfg.lucroResetEm ? `<button class="btn sm ghost" onclick="Pages.metas.zerar('lucro', true)">${icon('undo', 'sm')} Desfazer</button>` : ''}
+            <button class="btn sm" onclick="Pages.metas.zerar('lucro')">${icon('repeat', 'sm')} Zerar contagem</button></span>
+        </div>
         ${cels.length - comCusto.length ? `<div class="info-box mt">${icon('info')}<span>${cels.length - comCusto.length} aparelho(s) vendido(s) sem custo cadastrado não entram no cálculo de lucro (ex.: vendas importadas do sistema antigo).</span></div>` : ''}
         ${comCusto.length ? `<div class="lbl mt mb">Aparelhos vendidos</div>${comCusto.slice().sort((a, b) => String(b.venda.data).localeCompare(String(a.venda.data))).map(i => {
           const lu = i.lucro / i.qtd; const ok = lu >= meta;
@@ -128,6 +141,21 @@ Pages.metas = {
             <div class="right"><b class="${ok ? 'green' : 'red'}">${money(lu)}</b><div class="xs ${ok ? 'green' : 'red'}">${ok ? '✓ bateu' : `faltou ${money(meta - lu)}`}</div></div></div>`;
         }).join('')}` : ''}
       </div>`;
+  },
+
+  // Zera a contagem de uma meta (ou do lucro por aparelho): passa a contar só as vendas de agora em diante
+  async zerar(id, desfazer) {
+    const cfg = Metas.cfg();
+    const meta = id === 'lucro' ? null : cfg.itens.find(i => i.id === id);
+    const nome = meta ? meta.nome : 'Lucro por aparelho';
+    if (desfazer) {
+      if (meta) delete meta.resetEm; else delete cfg.lucroResetEm;
+      Store.save(); App.refresh(); return toast(`${nome}: voltou a contar o mês inteiro`);
+    }
+    if (!(await confirmDialog(`Zerar a contagem de "${nome}"? A meta passa a contar só as vendas feitas a partir de agora. As vendas não são apagadas e dá para desfazer.`, { ok: 'Zerar contagem' }))) return;
+    if (meta) meta.resetEm = nowISO(); else cfg.lucroResetEm = nowISO();
+    Store.log('Meta zerada', nome);
+    Store.save(); App.refresh(); toast(`${nome}: contagem zerada`);
   },
 
   mudarMes(d) {
